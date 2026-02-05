@@ -23,7 +23,11 @@ load_dotenv()
 app = Flask(__name__)
 
 # --- Gemini クライアントの初期化 (最新SDK方式) ---
-client = genai.Client(api_key=os.getenv("GOOGLE_API_KEY"))
+try:
+    client = genai.Client(api_key=os.getenv("GOOGLE_API_KEY"))
+except Exception as e:
+    print(f"Gemini Client Init Error: {e}")
+    client = None
 
 # 使用するGeminiモデルの設定
 MODEL_NAME = "gemini-3-flash-preview"
@@ -124,107 +128,113 @@ def get_data():
     ticker = req.get("ticker")
     if not ticker: return jsonify({"error": "ticker not provided"}), 400
 
-    # yfinanceで過去1年間のデータをダウンロード
-    df = yf.download(ticker, period="1y", interval="1d")
-    if df.empty: return jsonify({"error": "no data found"}), 404
-
-    # マルチインデックス対策
-    if isinstance(df.columns, pd.MultiIndex):
-        df.columns = df.columns.get_level_values(0)
-
-    # 欠損値（空データ）を削除
-    df = df.dropna(subset=['Open', 'High', 'Low', 'Close'])
-
-    # --- 📊 統計データの計算 ---
-    max_price = float(df['High'].max())
-    max_date = df['High'].idxmax().strftime("%Y-%m-%d")
-    min_price = float(df['Low'].min())
-    min_date = df['Low'].idxmin().strftime("%Y-%m-%d")
-    # 出来高TOP10の抽出
-    top10_vol = df.sort_values(by='Volume', ascending=False).head(10)
-    volume_ranking = [{"date": idx.strftime("%Y-%m-%d"), "volume": int(row["Volume"])} for idx, row in top10_vol.iterrows()]
-
-    # --- 🏦 ファンダメンタルズ情報の取得 ---
-    market_cap_str, div_yield_str, payout_ratio_str, ex_div_date_str, roe_str, roa_str, per_str, pbr_str = "N/A", "N/A", "N/A", "N/A", "N/A", "N/A", "N/A", "N/A"
-    
     try:
-        stock_obj = yf.Ticker(ticker)
-        info = stock_obj.info
+        # yfinanceで過去1年間のデータをダウンロード
+        df = yf.download(ticker, period="1y", interval="1d")
+        if df.empty: return jsonify({"error": "no data found"}), 404
 
-        # PER/PBRの取得
-        per = info.get("forwardPE") or info.get("trailingPE")
-        if per: per_str = f"{per:.2f}"
-        pbr = info.get("priceToBook")
-        if pbr: pbr_str = f"{pbr:.2f}"
+        # マルチインデックス対策
+        if isinstance(df.columns, pd.MultiIndex):
+            df.columns = df.columns.get_level_values(0)
 
-        # 時価総額の単位調整
-        mcap = info.get("marketCap")
-        if mcap:
-            market_cap_str = f"{mcap / 1e12:.2f} 兆円" if mcap >= 1e12 else f"{mcap / 1e8:.0f} 億円"
-        # 各種指標の取得
-        # yfinanceのdividendYieldは過去実績(Trailing)の場合が多く、日本のサイト(株探等)の予想利回りとズレが生じるため
-        # dividendRate (会社発表の年間配当額) を現在の株価で割って、予想利回りに近い値を算出する
-        current_price = info.get("currentPrice") or info.get("regularMarketPrice")
-        d_rate = info.get("dividendRate") # 年間配当額(予)
+        # 欠損値（空データ）を削除
+        df = df.dropna(subset=['Open', 'High', 'Low', 'Close'])
+
+        # --- 📊 統計データの計算 ---
+        max_price = float(df['High'].max())
+        max_date = df['High'].idxmax().strftime("%Y-%m-%d")
+        min_price = float(df['Low'].min())
+        min_date = df['Low'].idxmin().strftime("%Y-%m-%d")
+        # 出来高TOP10の抽出
+        top10_vol = df.sort_values(by='Volume', ascending=False).head(10)
+        volume_ranking = [{"date": idx.strftime("%Y-%m-%d"), "volume": int(row["Volume"])} for idx, row in top10_vol.iterrows()]
+
+        # --- 🏦 ファンダメンタルズ情報の取得 ---
+        market_cap_str, div_yield_str, payout_ratio_str, ex_div_date_str, roe_str, roa_str, per_str, pbr_str = "N/A", "N/A", "N/A", "N/A", "N/A", "N/A", "N/A", "N/A"
         
-        # 算出を試みる
-        if d_rate and current_price:
-            calculated_yield = (d_rate / current_price) * 100
-            div_yield_str = f"{calculated_yield:.2f} %"
-        else:
-            # 算出できない場合は yfinance提供の yield 項目を使用
-            dy = info.get("dividendYield") or info.get("trailingAnnualDividendYield")
-            if dy:
-                # 0.028 -> 2.8% の変換。稀に既に2.8で入っているケースがあるため補正
-                display_dy = dy * 100 if dy < 0.5 else dy 
-                div_yield_str = f"{display_dy:.2f} %"
+        try:
+            stock_obj = yf.Ticker(ticker)
+            info = stock_obj.info
+
+            if info:
+                # PER/PBRの取得
+                per = info.get("forwardPE") or info.get("trailingPE")
+                if per: per_str = f"{per:.2f}"
+                pbr = info.get("priceToBook")
+                if pbr: pbr_str = f"{pbr:.2f}"
+
+                # 時価総額の単位調整
+                mcap = info.get("marketCap")
+                if mcap:
+                    market_cap_str = f"{mcap / 1e12:.2f} 兆円" if mcap >= 1e12 else f"{mcap / 1e8:.0f} 億円"
+                
+                # 配当利回りの計算
+                current_price = info.get("currentPrice") or info.get("regularMarketPrice") or (df['Close'].iloc[-1] if not df.empty else None)
+                d_rate = info.get("dividendRate") 
+                
+                if d_rate and current_price:
+                    calculated_yield = (d_rate / current_price) * 100
+                    div_yield_str = f"{calculated_yield:.2f} %"
+                else:
+                    dy = info.get("dividendYield") or info.get("trailingAnnualDividendYield")
+                    if dy:
+                        display_dy = dy * 100 if dy < 0.5 else dy 
+                        div_yield_str = f"{display_dy:.2f} %"
+                
+                payout = info.get("payoutRatio")
+                if payout is not None: payout_ratio_str = f"{payout * 100:.2f} %"
+                
+                ex_div = info.get("exDividendDate")
+                if ex_div: ex_div_date_str = datetime.fromtimestamp(ex_div).strftime('%m-%d')
+                
+                roe = info.get("returnOnEquity")
+                if roe: roe_str = f"{roe * 100:.2f} %"
+                
+                roa = info.get("returnOnAssets")
+                if roa: roa_str = f"{roa * 100:.2f} %"
+        except Exception as e:
+            print(f"Info fetch error: {e}")
+            # エラーが出ても株価データがあれば続行
         
-        payout = info.get("payoutRatio")
-        if payout is not None: payout_ratio_str = f"{payout * 100:.2f} %"
-        ex_div = info.get("exDividendDate")
-        if ex_div: ex_div_date_str = datetime.fromtimestamp(ex_div).strftime('%m-%d')
-        roe = info.get("returnOnEquity")
-        if roe: roe_str = f"{roe * 100:.2f} %"
-        roa = info.get("returnOnAssets")
-        if roa: roa_str = f"{roa * 100:.2f} %"
+        # テクニカル指標（5, 25, 75日移動平均、25日乖離率）の計算
+        df['sma5'] = df['Close'].rolling(5).mean()
+        df['sma25'] = df['Close'].rolling(25).mean()
+        df['sma75'] = df['Close'].rolling(75).mean()
+        df['kairi25'] = (df['Close'] - df['sma25']) / df['sma25'] * 100
+
+        # データをDBに保存
+        store_to_db(ticker, df)
+
+        # フロントエンド（JavaScript）に送る形式に変換
+        def to_list(series):
+            return [{"time": idx.strftime("%Y-%m-%d"), "value": float(v)} for idx, v in series.items() if pd.notna(v)]
+
+        return jsonify({
+            "candles": [{"time": idx.strftime("%Y-%m-%d"), "open": float(r["Open"]), "high": float(r["High"]), "low": float(r["Low"]), "close": float(r["Close"])} for idx, r in df.iterrows()],
+            "sma5": to_list(df['sma5']),
+            "sma25": to_list(df['sma25']),
+            "sma75": to_list(df['sma75']),
+            "kairi25": to_list(df['kairi25']),
+            "stats": {
+                "max_price": max_price, "max_date": max_date, "min_price": min_price, "min_date": min_date,
+                "volume_ranking": volume_ranking, "market_cap": market_cap_str,
+                "dividend_yield": div_yield_str, "payout_ratio": payout_ratio_str, "ex_div_date": ex_div_date_str, 
+                "roe": roe_str, "roa": roa_str, "per": per_str, "pbr": pbr_str
+            }
+        })
     except Exception as e:
-        print(f"Info fetch error: {e}")
-    
-    # テクニカル指標（5, 25, 75日移動平均、25日乖離率）の計算
-    df['sma5'] = df['Close'].rolling(5).mean()
-    df['sma25'] = df['Close'].rolling(25).mean()
-    df['sma75'] = df['Close'].rolling(75).mean()
-    df['kairi25'] = (df['Close'] - df['sma25']) / df['sma25'] * 100
-
-    # データをDBに保存
-    store_to_db(ticker, df)
-
-    # フロントエンド（JavaScript）に送る形式に変換
-    def to_list(series):
-        return [{"time": idx.strftime("%Y-%m-%d"), "value": float(v)} for idx, v in series.items() if pd.notna(v)]
-
-    return jsonify({
-        "candles": [{"time": idx.strftime("%Y-%m-%d"), "open": float(r["Open"]), "high": float(r["High"]), "low": float(r["Low"]), "close": float(r["Close"])} for idx, r in df.iterrows()],
-        "sma5": to_list(df['sma5']),
-        "sma25": to_list(df['sma25']),
-        "sma75": to_list(df['sma75']),
-        "kairi25": to_list(df['kairi25']),
-        "stats": {
-            "max_price": max_price, "max_date": max_date, "min_price": min_price, "min_date": min_date,
-            "volume_ranking": volume_ranking, "market_cap": market_cap_str,
-            "dividend_yield": div_yield_str, "payout_ratio": payout_ratio_str, "ex_div_date": ex_div_date_str, 
-            "roe": roe_str, "roa": roa_str, "per": per_str, "pbr": pbr_str
-        }
-    })
+        print(f"Data fetch error: {e}")
+        return jsonify({"error": str(e)}), 500
 
 # --- AI テクニカル分析ルート (チャートデータに基づきAIが解説) ---
 @app.route("/analyze", methods=["POST"])
 def analyze():
     req = request.get_json()
     ticker = req.get("ticker", "不明")
-    # データ：直近1年間の日付と終値、乖離率を抽出
     recent_candles = [{"t": c["time"], "c": c["close"]} for c in req.get("candles", [])] 
     recent_kairi = [{"t": k["time"], "v": round(k["value"], 2)} for k in req.get("kairi25", [])]
+
+    if not client: return jsonify({"error": "AI Client not initialized"}), 500
 
     prompt = f"""
     # 役割
@@ -266,6 +276,8 @@ def analyze():
 def analyze_full():
     req = request.get_json()
     ticker = req.get("ticker", "不明")
+    
+    if not client: return jsonify({"error": "AI Client not initialized"}), 500
 
     prompt = f"""
     # 役割
@@ -311,6 +323,8 @@ def analyze_volume():
     req = request.get_json()
     ticker = req.get("ticker", "不明")
     volume_ranking = req.get("volume_ranking", [])
+
+    if not client: return jsonify({"error": "AI Client not initialized"}), 500
 
     # 日付が近い(前後1日以内)出来高急増日をグループ化
     grouped_dates = []
@@ -389,6 +403,8 @@ def analyze_market():
     mid_term = req.get("mid_term", False)
     sector_view = req.get("sector_view", False)
 
+    if not client: return jsonify({"error": "AI Client not initialized"}), 500
+
     query_parts = selected_topics[:]
     if free_keyword:
         query_parts.append(free_keyword)
@@ -466,6 +482,8 @@ def analyze_total():
     if not selected_results:
         return jsonify({"error": "分析対象の結果が選択されていません。"}), 400
 
+    if not client: return jsonify({"error": "AI Client not initialized"}), 500
+
     # 過去の分析結果を結合
     combined_texts = []
     for res in selected_results:
@@ -515,6 +533,8 @@ def get_company_info():
     ticker = req.get("ticker", "不明")
     name = req.get("name", "不明")
     
+    if not client: return jsonify({"error": "AI Client not initialized"}), 500
+
     # 現在の株価等の補助データを取得してAIに渡す
     price_info = ""
     try:
@@ -704,7 +724,9 @@ def export_pdf():
             'margin-right': '20mm',
             'margin-bottom': '20mm',
             'margin-left': '20mm',
-            'page-size': 'A4'
+            'page-size': 'A4',
+            'disable-smart-shrinking': None,
+            'print-media-type': None
         }
         
         # PDF生成
@@ -714,6 +736,9 @@ def export_pdf():
             if "No wkhtmltopdf executable found" in str(e):
                 return jsonify({"error": "サーバーに wkhtmltopdf がインストールされていません。公式サイトからインストールするか、wkhtmltopdf.exeを配置してください。"}), 500
             raise e
+        except Exception as e:
+            print(f"wkhtmltopdf runtime error: {e}")
+            return jsonify({"error": f"PDF Generation Error: {str(e)}"}), 500
 
         pdf_io = BytesIO(pdf_bytes)
         filename = f"{title}_{datetime.now().strftime('%Y%m%d%H%M%S')}.pdf"
