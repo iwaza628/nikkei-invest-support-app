@@ -29,6 +29,5 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # 6. アプリを起動するコマンド（gunicornを使用）
-# 起動時間を長く待つように --timeout 120 を追加
-# ポート番号は環境変数 PORT があればそれを使い、なければ 5000 を使う
-CMD gunicorn --bind 0.0.0.0:${PORT:-5000} --timeout 120 app:app
+# シェル経由で環境変数を確実に展開させ、かつシグナルハンドリングを適切に行う
+CMD ["sh", "-c", "gunicorn --bind 0.0.0.0:${PORT:-5000} --timeout 120 app:app"]
