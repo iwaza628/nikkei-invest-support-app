@@ -755,4 +755,6 @@ def export_pdf():
 
 if __name__ == "__main__":
     # 開発用サーバーの起動
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    # Renderの環境変数PORTがある場合はそれを使用し、なければ5000を使う
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port, debug=True)
