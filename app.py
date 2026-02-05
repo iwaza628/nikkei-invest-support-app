@@ -576,13 +576,13 @@ def export_pdf():
         content_html = markdown.markdown(content_md, extensions=['tables', 'fenced_code'])
 
         # PDF用のHTMLテンプレート
-        # メイリオなどのWindows標準フォントを指定
+        # Windows(メイリオ)とLinux(IPAゴシック)の両方のフォントを指定
         full_html = f"""
         <html>
         <head>
             <meta charset="UTF-8">
             <style>
-                body {{ font-family: "Meiryo", "MS Gothic", sans-serif; line-height: 1.6; color: #333; margin: 2cm; }}
+                body {{ font-family: "Meiryo", "MS Gothic", "IPAexGothic", "IPAGothic", sans-serif; line-height: 1.6; color: #333; margin: 2cm; }}
                 h1 {{ color: #1a237e; border-bottom: 2px solid #1a237e; padding-bottom: 10px; }}
                 h2 {{ color: #0d47a1; border-left: 5px solid #0d47a1; padding-left: 10px; margin-top: 20px; }}
                 h3 {{ color: #1565c0; }}
@@ -605,15 +605,17 @@ def export_pdf():
         """
 
         # wkhtmltopdfのパス設定
-        # 一般的なインストール先を探索
-        path_wkhtmltopdf = r'C:\Program Files\wkhtmltopdf\bin\wkhtmltopdf.exe'
-        if not os.path.exists(path_wkhtmltopdf):
-            # カレントディレクトリにある場合 (ポータブル版など)
-            path_wkhtmltopdf = os.path.join(BASE_DIR, 'wkhtmltopdf.exe')
+        # WindowsとLinux(Render)の両方に対応
+        path_wkhtmltopdf_win = r'C:\Program Files\wkhtmltopdf\bin\wkhtmltopdf.exe'
+        path_wkhtmltopdf_linux = '/usr/bin/wkhtmltopdf'
         
         config = None
-        if os.path.exists(path_wkhtmltopdf):
-            config = pdfkit.configuration(wkhtmltopdf=path_wkhtmltopdf)
+        if os.path.exists(path_wkhtmltopdf_linux):
+            # Linux (Render) 環境
+            config = pdfkit.configuration(wkhtmltopdf=path_wkhtmltopdf_linux)
+        elif os.path.exists(path_wkhtmltopdf_win):
+            # Windows ローカル環境
+            config = pdfkit.configuration(wkhtmltopdf=path_wkhtmltopdf_win)
         
         # オプション設定
         options = {
