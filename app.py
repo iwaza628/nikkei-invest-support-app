@@ -576,21 +576,98 @@ def export_pdf():
         content_html = markdown.markdown(content_md, extensions=['tables', 'fenced_code'])
 
         # PDF用のHTMLテンプレート
-        # Windows(メイリオ)とLinux(IPAゴシック)の両方のフォントを指定
+        # CSSを大幅に強化してPDFのレイアウトを整える
         full_html = f"""
         <html>
         <head>
             <meta charset="UTF-8">
             <style>
-                body {{ font-family: "Meiryo", "MS Gothic", "IPAexGothic", "IPAGothic", sans-serif; line-height: 1.6; color: #333; margin: 2cm; }}
-                h1 {{ color: #1a237e; border-bottom: 2px solid #1a237e; padding-bottom: 10px; }}
-                h2 {{ color: #0d47a1; border-left: 5px solid #0d47a1; padding-left: 10px; margin-top: 20px; }}
-                h3 {{ color: #1565c0; }}
-                table {{ width: 100%; border-collapse: collapse; margin: 20px 0; }}
-                th, td {{ border: 1px solid #ddd; padding: 8px; text-align: left; }}
-                th {{ background-color: #f2f2f2; }}
-                .header {{ text-align: right; font-size: 0.9em; color: #666; margin-bottom: 20px; }}
-                .footer {{ text-align: center; font-size: 0.8em; color: #999; margin-top: 30px; }}
+                @page {{
+                    size: A4;
+                    margin: 20mm;
+                }}
+                body {{
+                    font-family: "Meiryo", "MS Gothic", "IPAexGothic", "IPAGothic", sans-serif;
+                    line-height: 1.6;
+                    color: #333;
+                    font-size: 11pt;
+                }}
+                h1 {{
+                    color: #1a237e;
+                    border-bottom: 3px solid #1a237e;
+                    padding-bottom: 10px;
+                    font-size: 24pt;
+                    margin-bottom: 20pt;
+                }}
+                h2 {{
+                    color: #0d47a1;
+                    border-left: 8px solid #0d47a1;
+                    padding-left: 15px;
+                    margin-top: 25pt;
+                    margin-bottom: 15pt;
+                    font-size: 18pt;
+                    background-color: #f5f5f5;
+                    padding-top: 5px;
+                    padding-bottom: 5px;
+                }}
+                h3 {{
+                    color: #1565c0;
+                    font-size: 14pt;
+                    border-bottom: 1px solid #ddd;
+                    margin-top: 15pt;
+                }}
+                p {{
+                    margin-bottom: 10pt;
+                    word-wrap: break-word;
+                }}
+                table {{
+                    width: 100%;
+                    border-collapse: collapse;
+                    margin: 20pt 0;
+                    table-layout: fixed;
+                }}
+                th, td {{
+                    border: 1px solid #999;
+                    padding: 10px;
+                    text-align: left;
+                    word-wrap: break-word;
+                }}
+                th {{
+                    background-color: #e3f2fd;
+                    font-weight: bold;
+                }}
+                tr:nth-child(even) {{
+                    background-color: #fafafa;
+                }}
+                .header {{
+                    text-align: right;
+                    font-size: 9pt;
+                    color: #666;
+                    margin-bottom: 20pt;
+                    border-bottom: 1px solid #eee;
+                }}
+                .footer {{
+                    text-align: center;
+                    font-size: 8pt;
+                    color: #999;
+                    margin-top: 30pt;
+                    border-top: 1px solid #eee;
+                    padding-top: 10pt;
+                }}
+                blockquote {{
+                    margin: 15pt 0;
+                    padding: 10pt 20pt;
+                    background-color: #f9f9f9;
+                    border-left: 5px solid #ccc;
+                    font-style: italic;
+                }}
+                ul, ol {{
+                    margin-bottom: 15pt;
+                    padding-left: 25pt;
+                }}
+                li {{
+                    margin-bottom: 5pt;
+                }}
             </style>
         </head>
         <body>
@@ -622,7 +699,12 @@ def export_pdf():
             'encoding': "UTF-8",
             'enable-local-file-access': None,
             'quiet': '',
-            'no-outline': None
+            'no-outline': None,
+            'margin-top': '20mm',
+            'margin-right': '20mm',
+            'margin-bottom': '20mm',
+            'margin-left': '20mm',
+            'page-size': 'A4'
         }
         
         # PDF生成

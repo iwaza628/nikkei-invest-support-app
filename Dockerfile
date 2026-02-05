@@ -2,10 +2,19 @@
 FROM python:3.11-slim
 
 # 2. 日本語フォントとPDF作成に必要なソフト(wkhtmltopdf)をインストール
+# 画像処理やフォント管理に必要なライブラリを追加
 RUN apt-get update && apt-get install -y \
     wkhtmltopdf \
     fonts-ipafont-gothic \
     fonts-ipafont-mincho \
+    fontconfig \
+    libjpeg62-turbo \
+    libx11-6 \
+    libxext6 \
+    libxrender1 \
+    xfonts-75dpi \
+    xfonts-base \
+    && fc-cache -fv \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
