@@ -154,46 +154,72 @@ def get_data():
         
         try:
             stock_obj = yf.Ticker(ticker)
-            info = stock_obj.info
+            
+            # fast_info (軽量API) を優先して利用
+            # 時価総額
+            mcap = None
+            if hasattr(stock_obj, 'fast_info') and 'market_cap' in stock_obj.fast_info:
+                mcap = stock_obj.fast_info['market_cap']
+            
+            # fast_infoで取れない場合はinfo (重いAPI) を試す
+            info = {}
+            if not mcap:
+                try:
+                    info = stock_obj.info
+                    mcap = info.get("marketCap")
+                except Exception:
+                    pass
 
-            if info:
-                # PER/PBRの取得
-                per = info.get("forwardPE") or info.get("trailingPE")
-                if per: per_str = f"{per:.2f}"
-                pbr = info.get("priceToBook")
-                if pbr: pbr_str = f"{pbr:.2f}"
+            if mcap:
+                market_cap_str = f"{mcap / 1e12:.2f} 兆円" if mcap >= 1e12 else f"{mcap / 1e8:.0f} 億円"
 
-                # 時価総額の単位調整
-                mcap = info.get("marketCap")
-                if mcap:
-                    market_cap_str = f"{mcap / 1e12:.2f} 兆円" if mcap >= 1e12 else f"{mcap / 1e8:.0f} 億円"
-                
-                # 配当利回りの計算
-                current_price = info.get("currentPrice") or info.get("regularMarketPrice") or (df['Close'].iloc[-1] if not df.empty else None)
-                d_rate = info.get("dividendRate") 
-                
-                if d_rate and current_price:
-                    calculated_yield = (d_rate / current_price) * 100
-                    div_yield_str = f"{calculated_yield:.2f} %"
-                else:
-                    dy = info.get("dividendYield") or info.get("trailingAnnualDividendYield")
-                    if dy:
-                        display_dy = dy * 100 if dy < 0.5 else dy 
-                        div_yield_str = f"{display_dy:.2f} %"
-                
-                payout = info.get("payoutRatio")
-                if payout is not None: payout_ratio_str = f"{payout * 100:.2f} %"
-                
-                ex_div = info.get("exDividendDate")
-                if ex_div: ex_div_date_str = datetime.fromtimestamp(ex_div).strftime('%m-%d')
-                
-                roe = info.get("returnOnEquity")
-                if roe: roe_str = f"{roe * 100:.2f} %"
-                
-                roa = info.get("returnOnAssets")
-                if roa: roa_str = f"{roa * 100:.2f} %"
+            # PER/PBR (infoから取得が必要)
+            if not info:
+                try:
+                    info = stock_obj.info
+                except Exception:
+                    info = {}
+            
+            per = info.get("forwardPE") or info.get("trailingPE")
+            if per: per_str = f"{per:.2f}"
+            
+            pbr = info.get("priceToBook")
+            if pbr: pbr_str = f"{pbr:.2f}"
+
+            # 配当利回り
+            current_price = None
+            if hasattr(stock_obj, 'fast_info') and 'last_price' in stock_obj.fast_info:
+                current_price = stock_obj.fast_info['last_price']
+            
+            if not current_price and not df.empty:
+                current_price = df['Close'].iloc[-1]
+
+            d_rate = info.get("dividendRate") 
+            
+            if d_rate and current_price:
+                calculated_yield = (d_rate / current_price) * 100
+                div_yield_str = f"{calculated_yield:.2f} %"
+            else:
+                dy = info.get("dividendYield") or info.get("trailingAnnualDividendYield")
+                if dy:
+                    display_dy = dy * 100 if dy < 0.5 else dy 
+                    div_yield_str = f"{display_dy:.2f} %"
+            
+            # その他の指標
+            payout = info.get("payoutRatio")
+            if payout is not None: payout_ratio_str = f"{payout * 100:.2f} %"
+            
+            ex_div = info.get("exDividendDate")
+            if ex_div: ex_div_date_str = datetime.fromtimestamp(ex_div).strftime('%m-%d')
+            
+            roe = info.get("returnOnEquity")
+            if roe: roe_str = f"{roe * 100:.2f} %"
+            
+            roa = info.get("returnOnAssets")
+            if roa: roa_str = f"{roa * 100:.2f} %"
+
         except Exception as e:
-            print(f"Info fetch error: {e}")
+            print(f"Fundamentals fetch error: {e}")
             # エラーが出ても株価データがあれば続行
         
         # テクニカル指標（5, 25, 75日移動平均、25日乖離率）の計算
