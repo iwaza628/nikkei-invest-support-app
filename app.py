@@ -609,6 +609,109 @@ def get_company_info():
         print(f"Company Info Error: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
+# --- AI 再調査・深掘りルート (既存レポートに対する追加調査) ---
+@app.route("/re_research", methods=["POST"])
+def re_research():
+    req = request.get_json()
+    selected_results = req.get("selected_results", [])
+    user_question = req.get("user_question", "")
+    mode = req.get("mode", "auto") # "auto" or "manual"
+    
+    if not selected_results:
+        return jsonify({"error": "分析対象のレポートが選択されていません。"}), 400
+
+    if not client: return jsonify({"error": "AI Client not initialized"}), 500
+
+    # 過去の分析結果を結合
+    combined_texts = []
+    for res in selected_results:
+        text = f"【{res['title']}】\n{res['content']}"
+        combined_texts.append(text)
+    
+    context_text = "\n\n---\n\n".join(combined_texts)
+
+    prompt = ""
+    if mode == "auto":
+        prompt = f"""
+        # 役割
+        あなたは金融情報を調査することを得意とする金融アナリストです。
+
+        # 目的
+        以下のレポートの内容を精査し、情報の不足・矛盾・新たな疑問点を自律的に発見した上で、
+        Google Searchによる再調査を行なうことで、「再調査レポート」を作成する。
+
+        # レポート
+        {context_text}
+
+        # 出力ルール
+        - 分析結果はMarkdown形式で出力すること。
+        - 各項目の最後に、根拠となる出典URLを必ず明記すること。
+        - 分析結果が不明瞭な箇所は、不明瞭な箇所を記述した上で、「判断材料不足」としてもよい。
+
+        # 指示内容
+        1. 批判的検証: 元のレポートに欠けている視点、データが古い可能性、論理の飛躍を指摘し、それを補完する最新情報を調査・提示。
+        2. 深掘り調査: 元のレポートで触れられているトピックについて、「なぜ？」「その背景は？」「競合はどうなのか？」といった疑問を自ら立て、追加調査。
+        3. リスク再評価: 新たな情報を踏まえた上で、投資判断における隠れたリスクを分析。
+        4. 結論: 再調査によって新たに得られた情報を整理。
+        """
+    else:
+        if not user_question:
+             return jsonify({"error": "質問内容が入力されていません。"}), 400
+        
+        prompt = f"""
+        # 役割
+        あなたはユーザーの疑問に答える頼れる金融アドバイザーです。
+
+        # 目的
+        以下のレポートの内容を踏まえた上で、Google Searchを用いて
+        ユーザーの質問に回答する。
+
+        # レポート
+        {context_text}
+
+        # ユーザーの質問
+        「{user_question}」
+
+        # 出力ルール
+        - 回答はMarkdown形式で出力すること。
+        - 各項目の最後に、根拠となる出典URLを必ず明記すること。
+        - 分析結果が不明瞭な箇所は、不明瞭な箇所を記述した上で、「判断材料不足」としてもよい。
+
+        # 指示内容
+        1. 質問への回答: ユーザーの質問に対して、最新情報に基づいた具体的かつ明確な回答を提供。
+        2. 関連情報の補足: 質問に関連する重要な周辺情報や、投資判断において考慮すべき点があれば追加で言及。
+        """
+
+    try:
+        # Google検索(Grounding)機能を有効化して回答を生成
+        # 再試行ロジック (リトライ) を実装
+        max_retries = 3
+        retry_delay = 2 # 秒
+
+        for attempt in range(max_retries):
+            try:
+                response = client.models.generate_content(
+                    model=MODEL_NAME,
+                    contents=prompt,
+                    config=types.GenerateContentConfig(
+                        tools=[types.Tool(google_search=types.GoogleSearch())],
+                        thinking_config=types.ThinkingConfig(include_thoughts=True, thinking_level="high"),
+                    )
+                )
+                return jsonify({"analysis": response.text})
+            except Exception as inner_e:
+                error_str = str(inner_e)
+                # 503エラー (Overloaded) の場合のみリトライ
+                if "503" in error_str or "UNAVAILABLE" in error_str or "429" in error_str:
+                    if attempt < max_retries - 1:
+                        time.sleep(retry_delay * (attempt + 1)) # エクスポネンシャルバックオフ気味に待機
+                        continue
+                raise inner_e # その他のエラー、またはリトライ回数超過時は例外を投げる
+        
+    except Exception as e:
+        print(f"Re-Research Error: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
 # --- PDF出力ルート (pdfkit使用) ---
 @app.route("/export_pdf", methods=["POST"])
 def export_pdf():

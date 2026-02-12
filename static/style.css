@@ -1,0 +1,305 @@
+/* 🎨 全体レイアウトと基本スタイル (Bootstrap補完) */
+body {
+    background-color: #f8f9fa;
+    color: #333;
+    font-family: "Helvetica Neue", Arial, "Hiragino Kaku Gothic ProN", "Hiragino Sans", Meiryo, sans-serif;
+}
+
+/* 🏆 ヘッダーの微調整 */
+header.navbar {
+    box-shadow: 0 2px 4px rgba(0,0,0,.1);
+    margin-bottom: 2rem;
+}
+.navbar-brand {
+    font-weight: bold;
+    letter-spacing: 1px;
+}
+
+/* 🛠️ カード（コントロールパネル、分析結果など） */
+.card {
+    border: none;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+    margin-bottom: 1.5rem;
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+.card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+}
+.card-header {
+    background-color: #fff;
+    border-bottom: 2px solid #f0f0f0;
+    font-weight: bold;
+    color: #555;
+}
+
+/* 📈 チャートエリア */
+#chart, #kairiChart {
+    width: 100%;
+    background: #fff;
+    border-radius: 4px;
+}
+#chart { height: 400px; }
+#kairiChart { height: 150px; margin-top: 10px; }
+
+/* 📊 凡例 */
+.legend {
+    list-style: none;
+    padding: 0;
+    margin: 10px 0;
+    font-size: 0.9em;
+    color: #666;
+    display: flex;
+    gap: 15px;
+    flex-wrap: wrap;
+}
+
+/* 🔄 ローディング表示 (Bootstrap Spinner活用 + カスタム) */
+#loading-container {
+    display: none;
+    background: rgba(231, 241, 255, 0.7);
+    border-radius: 8px;
+    padding: 2rem;
+    text-align: center;
+    border: 1px solid #cce5ff;
+    margin: 1rem 0;
+    animation: fadeIn 0.5s;
+}
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+.loading-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
+}
+
+/* 📝 Markdown出力エリア */
+#analysisResult {
+    line-height: 1.8;
+    color: #333;
+}
+#analysisResult h1, #analysisResult h2, #analysisResult h3 {
+    margin-top: 1.5rem;
+    margin-bottom: 1rem;
+    color: #2c3e50;
+}
+#analysisResult h1 { font-size: 1.8rem; border-bottom: 2px solid #eee; padding-bottom: 0.5rem; }
+#analysisResult h2 { font-size: 1.5rem; border-left: 5px solid #0d6efd; padding-left: 10px; background: #f8f9fa; }
+#analysisResult h3 { font-size: 1.2rem; font-weight: bold; }
+#analysisResult ul, #analysisResult ol { padding-left: 1.5rem; margin-bottom: 1rem; }
+#analysisResult li { margin-bottom: 0.5rem; }
+#analysisResult blockquote {
+    border-left: 4px solid #ddd;
+    padding-left: 1rem;
+    color: #666;
+    font-style: italic;
+}
+#analysisResult table {
+    width: 100%;
+    margin-bottom: 1rem;
+    border-collapse: collapse;
+}
+#analysisResult th, #analysisResult td {
+    border: 1px solid #dee2e6;
+    padding: 0.75rem;
+}
+#analysisResult th { background-color: #e9ecef; }
+
+/* 🌍 市況分析フォーム */
+#market-form-area {
+    display: none;
+    animation: slideDown 0.3s ease-out;
+}
+@keyframes slideDown {
+    from { opacity: 0; transform: translateY(-10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.market-category h4 {
+    font-size: 1rem;
+    color: #495057;
+    border-left: 4px solid #0d6efd;
+    padding-left: 10px;
+    margin-bottom: 15px;
+}
+.market-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: 10px;
+}
+
+/* ❓ ツールチップ（ヘルプアイコン） */
+.help-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: help;
+    margin-left: 5px;
+    vertical-align: middle;
+    position: relative;
+}
+.help-icon:hover { color: #0d6efd !important; }
+
+/* ツールチップの吹き出し */
+.help-icon::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    bottom: 125%;
+    left: 50%;
+    transform: translateX(-50%);
+    background-color: rgba(51, 51, 51, 0.95);
+    color: #fff;
+    padding: 10px 14px;
+    border-radius: 6px;
+    width: 330px;
+    max-width: 95vw;
+    font-size: 11px;
+    font-weight: normal;
+    line-height: 1.6;
+    visibility: hidden;
+    opacity: 0;
+    transition: opacity 0.2s;
+    z-index: 1000;
+    white-space: pre-line;
+    text-align: left;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+    pointer-events: none;
+}
+.help-icon:hover::after {
+    visibility: visible;
+    opacity: 1;
+}
+.help-icon.bottom::after { bottom: auto; top: 125%; }
+
+/* 🚀 実行ボタン（グラデーション） */
+.btn-gradient-full {
+    background: linear-gradient(135deg, #0d6efd 0%, #0043a8 100%);
+    color: white; border: none; box-shadow: 0 4px 6px rgba(13, 110, 253, 0.2); transition: all 0.3s;
+}
+.btn-gradient-full:hover { background: linear-gradient(135deg, #0b5ed7 0%, #003588 100%); transform: translateY(-1px); box-shadow: 0 6px 8px rgba(13, 110, 253, 0.3); color: white; }
+
+.btn-gradient-volume {
+    background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+    color: white; border: none; box-shadow: 0 4px 6px rgba(245, 158, 11, 0.2); transition: all 0.3s;
+}
+.btn-gradient-volume:hover { background: linear-gradient(135deg, #fbbf24 0%, #b45309 100%); transform: translateY(-1px); box-shadow: 0 6px 8px rgba(245, 158, 11, 0.3); color: white; }
+
+.btn-gradient-tech {
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    color: white; border: none; box-shadow: 0 4px 6px rgba(16, 185, 129, 0.2); transition: all 0.3s;
+}
+.btn-gradient-tech:hover { background: linear-gradient(135deg, #34d399 0%, #047857 100%); transform: translateY(-1px); box-shadow: 0 6px 8px rgba(16, 185, 129, 0.3); color: white; }
+
+.btn-gradient-market {
+    background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+    color: white; border: none; box-shadow: 0 4px 6px rgba(99, 102, 241, 0.2); transition: all 0.3s;
+}
+.btn-gradient-market:hover { background: linear-gradient(135deg, #818cf8 0%, #3730a3 100%); transform: translateY(-1px); box-shadow: 0 6px 8px rgba(99, 102, 241, 0.3); color: white; }
+
+.btn-gradient-total {
+    background: linear-gradient(135deg, #ec4899 0%, #db2777 100%);
+    color: white; border: none; box-shadow: 0 4px 6px rgba(236, 72, 153, 0.2); transition: all 0.3s;
+}
+.btn-gradient-total:hover { background: linear-gradient(135deg, #f472b6 0%, #9d174d 100%); transform: translateY(-1px); box-shadow: 0 6px 8px rgba(236, 72, 153, 0.3); color: white; }
+
+.btn-gradient-reresearch {
+    background: linear-gradient(135deg, #06b6d4 0%, #0891b2 100%);
+    color: white; border: none; box-shadow: 0 4px 6px rgba(6, 182, 212, 0.2); transition: all 0.3s;
+}
+.btn-gradient-reresearch:hover { background: linear-gradient(135deg, #22d3ee 0%, #0e7490 100%); transform: translateY(-1px); box-shadow: 0 6px 8px rgba(6, 182, 212, 0.3); color: white; }
+
+/* 📜 分析履歴 */
+.history-item {
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+.history-item:hover {
+    background-color: #f1f8ff;
+}
+.history-item.active {
+    background-color: #e7f1ff;
+    border-left: 4px solid #0d6efd;
+}
+
+/* 📑 タブボタンのカスタマイズ */
+.analysis-tabs .nav-link {
+    color: #666;
+    border: 1px solid transparent;
+    border-radius: 8px 8px 0 0;
+    transition: all 0.3s;
+    font-weight: 500;
+}
+
+/* 個別株分析タブ */
+.analysis-tabs .nav-link[data-mode="full"].active {
+    background-color: #0d6efd !important;
+    color: white !important;
+    border-color: #0d6efd;
+}
+.analysis-tabs .nav-link[data-mode="full"]:not(.active):hover {
+    color: #0d6efd;
+    background-color: #f0f7ff;
+}
+
+/* 出来高分析タブ */
+.analysis-tabs .nav-link[data-mode="volume"].active {
+    background-color: #f59e0b !important;
+    color: white !important;
+    border-color: #f59e0b;
+}
+.analysis-tabs .nav-link[data-mode="volume"]:not(.active):hover {
+    color: #f59e0b;
+    background-color: #fffbeb;
+}
+
+/* テクニカル分析タブ */
+.analysis-tabs .nav-link[data-mode="tech"].active {
+    background-color: #10b981 !important;
+    color: white !important;
+    border-color: #10b981;
+}
+.analysis-tabs .nav-link[data-mode="tech"]:not(.active):hover {
+    color: #10b981;
+    background-color: #f0fdf4;
+}
+
+/* 市況分析タブ */
+.analysis-tabs .nav-link[data-mode="market"].active {
+    background-color: #6366f1 !important;
+    color: white !important;
+    border-color: #6366f1;
+}
+.analysis-tabs .nav-link[data-mode="market"]:not(.active):hover {
+    color: #6366f1;
+    background-color: #f5f3ff;
+}
+
+/* 総合分析タブ */
+.analysis-tabs .nav-link[data-mode="total"].active {
+    background-color: #ec4899 !important;
+    color: white !important;
+    border-color: #ec4899;
+}
+.analysis-tabs .nav-link[data-mode="total"]:not(.active):hover {
+    color: #ec4899;
+    background-color: #fdf2f8;
+}
+
+/* 再調査タブ */
+.analysis-tabs .nav-link[data-mode="reresearch"].active {
+    background-color: #06b6d4 !important;
+    color: white !important;
+    border-color: #06b6d4;
+}
+.analysis-tabs .nav-link[data-mode="reresearch"]:not(.active):hover {
+    color: #06b6d4;
+    background-color: #ecfeff;
+}
+
+/* 📱 スマホ対応（レスポンシブ微調整） */
+@media (max-width: 768px) {
+    .navbar-brand { font-size: 1.2rem; }
+    #chart { height: 300px; }
+    .btn-lg { width: 100%; margin-bottom: 0.5rem; }
+}

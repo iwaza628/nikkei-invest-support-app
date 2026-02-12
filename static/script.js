@@ -2,6 +2,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // DOM要素の取得
   const industrySelect = document.getElementById("industrySelect");
   const stockSelect = document.getElementById("stockSelect");
+  const stockSearch = document.getElementById("stockSearch"); // 🌟 追加
   const recentList = document.getElementById("recentList");
   const analysisResult = document.getElementById("analysisResult");
   const loadingSpinner = document.getElementById("loading-spinner");
@@ -12,6 +13,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const exportPdfBtn = document.getElementById("exportPdfBtn");
   const tabBtns = document.querySelectorAll(".tab-btn");
   const marketFormArea = document.getElementById("market-form-area");
+  const reresearchFormArea = document.getElementById("reresearch-form-area"); // 🌟 追加
 
   // アプリケーションの状態管理
   let selectedMode = "full"; // デフォルトは個別株分析
@@ -42,7 +44,13 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   // シリーズ（線やロウソク足）の追加
-  const candleSeries = chart.addCandlestickSeries();
+  const candleSeries = chart.addCandlestickSeries({
+    priceFormat: {
+      type: 'price',
+      precision: 0,
+      minMove: 1,
+    },
+  });
   // 終値追跡用（不可視、クロスヘア用）
   const closeTrackerSeries = chart.addLineSeries({
     color: "rgba(0, 0, 0, 0)",
@@ -57,7 +65,18 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   // 移動平均線(SMA)の設定
-  const smaOptions = { lineWidth: 1, title: "", lastValueVisible: false, priceLineVisible: false, crosshairMarkerVisible: false };
+  const smaOptions = { 
+    lineWidth: 1, 
+    title: "", 
+    lastValueVisible: false, 
+    priceLineVisible: false, 
+    crosshairMarkerVisible: false,
+    priceFormat: {
+      type: 'price',
+      precision: 0,
+      minMove: 1,
+    },
+  };
   const sma5Series = chart.addLineSeries({ ...smaOptions, color: "green" });
   const sma25Series = chart.addLineSeries({ ...smaOptions, color: "red" });
   const sma75Series = chart.addLineSeries({ ...smaOptions, color: "blue" });
@@ -155,7 +174,8 @@ document.addEventListener("DOMContentLoaded", () => {
     let history = JSON.parse(localStorage.getItem("stock_history") || "[]");
     history = history.filter(h => h.ticker !== ticker);
     history.unshift({ ticker, name });
-    localStorage.setItem("stock_history", JSON.stringify(history.slice(0, 5)));
+    // 履歴を10件まで保存
+    localStorage.setItem("stock_history", JSON.stringify(history.slice(0, 10)));
     renderRecent();
   }
 
@@ -166,7 +186,6 @@ document.addEventListener("DOMContentLoaded", () => {
       const btn = document.createElement("button");
       btn.textContent = `${h.ticker} ${h.name}`;
       btn.onclick = () => { 
-        // 業種フィルタが原因で銘柄が見つからないのを防ぐため、全表示にリセット
         if (industrySelect.value !== "all") {
           industrySelect.value = "all";
           updateStockList();
@@ -180,6 +199,57 @@ document.addEventListener("DOMContentLoaded", () => {
 
   industrySelect.addEventListener("change", updateStockList);
   updateStockList(); renderRecent();
+
+  // --- 🌟 銘柄検索機能 (オートコンプリート) ---
+  const searchResults = document.getElementById("searchResults");
+  if (stockSearch && searchResults) {
+      stockSearch.addEventListener("input", (e) => {
+          const keyword = e.target.value.trim().toLowerCase();
+          if (!keyword) {
+              searchResults.style.display = "none";
+              return;
+          }
+          
+          const filtered = allStocks.filter(s => 
+              s.ticker.toLowerCase().includes(keyword) || 
+              s.name.toLowerCase().includes(keyword)
+          );
+          
+          searchResults.innerHTML = "";
+          if (filtered.length > 0) {
+              filtered.slice(0, 10).forEach(s => {
+                  const item = document.createElement("button");
+                  item.className = "list-group-item list-group-item-action text-start";
+                  item.innerHTML = `<span class="fw-bold">${s.ticker}</span> <span class="small ms-2">${s.name}</span>`;
+                  item.onclick = () => {
+                      stockSearch.value = ""; // 入力クリア
+                      searchResults.style.display = "none";
+                      
+                      // 業種フィルタをリセット
+                      if (industrySelect.value !== "all") {
+                          industrySelect.value = "all";
+                          updateStockList();
+                      }
+                      
+                      stockSelect.value = s.ticker;
+                      stockSelect.dispatchEvent(new Event('change'));
+                  };
+                  searchResults.appendChild(item);
+              });
+              searchResults.style.display = "block";
+          } else {
+              searchResults.innerHTML = '<div class="list-group-item text-muted small">候補が見つかりません</div>';
+              searchResults.style.display = "block";
+          }
+      });
+      
+      // 検索ボックス以外をクリックしたら候補を閉じる
+      document.addEventListener("click", (e) => {
+          if (!stockSearch.contains(e.target) && !searchResults.contains(e.target)) {
+              searchResults.style.display = "none";
+          }
+      });
+  }
 
   // --- 6. サーバーからデータ取得とチャートへの反映 ---
   stockSelect.addEventListener("change", async function() {
@@ -247,6 +317,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
       // 各フォーム・案内文の表示制御
       marketFormArea.style.display = (selectedMode === "market") ? "block" : "none";
+      if (reresearchFormArea) {
+          reresearchFormArea.style.display = (selectedMode === "reresearch") ? "block" : "none";
+      }
       
       // 全ての案内文を一度非表示にする
       document.querySelectorAll(".analysis-guide").forEach(el => el.style.display = "none");
@@ -262,9 +335,13 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   // 統合された分析実行処理
-  async function runAnalysis() {
-      // 市況分析・総合分析以外は銘柄選択が必須
-      if (selectedMode !== "market" && selectedMode !== "total" && !currentChartData.ticker) {
+  async function runAnalysis(e) {
+      // クリックされたボタンからサブモードを取得 (再調査のauto/manual判定用)
+      const btn = e.currentTarget;
+      const subMode = btn.dataset.mode; // reresearch_auto or reresearch_manual
+
+      // 市況分析・総合分析・再調査以外は銘柄選択が必須
+      if (selectedMode !== "market" && selectedMode !== "total" && selectedMode !== "reresearch" && !currentChartData.ticker) {
           alert("銘柄を選択してください。");
           return;
       }
@@ -275,9 +352,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
       let endpoint, bodyData, msg, title;
 
-      if (selectedMode === "total") {
-          endpoint = "/analyze_total";
-          
+      if (selectedMode === "total" || selectedMode === "reresearch") {
           // チェックされた履歴アイテムを取得
           const selectedCheckboxes = document.querySelectorAll('.history-select:checked');
           if (selectedCheckboxes.length === 0) {
@@ -293,9 +368,38 @@ document.addEventListener("DOMContentLoaded", () => {
               };
           });
 
-          bodyData = { selected_results: selectedResults };
-          msg = "複数のレポートを統合して総合分析中...";
-          title = "## 総合分析レポート\n\n";
+          if (selectedMode === "total") {
+              endpoint = "/analyze_total";
+              bodyData = { selected_results: selectedResults };
+              msg = "複数のレポートを統合して総合分析中...";
+              title = "## 総合分析レポート\n\n";
+          } else {
+              // 再調査モード (reresearch)
+              endpoint = "/re_research";
+              
+              if (subMode === "reresearch_manual") {
+                  const userQ = document.getElementById("user_question").value;
+                  if (!userQ) {
+                      alert("質問内容を入力してください。");
+                      return;
+                  }
+                  bodyData = { 
+                      selected_results: selectedResults,
+                      user_question: userQ,
+                      mode: "manual"
+                  };
+                  msg = "あなたの質問について調査中...";
+                  title = "## 再調査レポート (Q&A)\n\n";
+              } else {
+                  // reresearch_auto
+                  bodyData = { 
+                      selected_results: selectedResults,
+                      mode: "auto"
+                  };
+                  msg = "AIが深掘り調査中...";
+                  title = "## 再調査レポート (深掘り調査)\n\n";
+              }
+          }
 
       } else if (selectedMode === "market") {
           endpoint = "/analyze_market";
@@ -455,6 +559,9 @@ document.addEventListener("DOMContentLoaded", () => {
           titleText = `🌍 市況分析: ${topics}`;
       } else if (mode === "total") {
           titleText = `💎 総合分析レポート`;
+      } else if (mode === "reresearch") {
+          const subType = (inputData.mode === "manual") ? "Q&A" : "自律深掘り";
+          titleText = `🕵️ 再調査 (${subType})`;
       } else if (mode === "volume") {
           titleText = `📊 出来高分析: ${inputData.ticker}`;
       } else {
@@ -494,7 +601,7 @@ document.addEventListener("DOMContentLoaded", () => {
           exportPdfBtn.dataset.rawContent = rawContent;
           
           // 履歴から復元する場合もファイル名を再構成
-          const modeName = titleText.replace(/💎 |🌍 |📊 |📈 |🔍 |レポート|結果|分析: |個別株分析: |テクニカル分析: /g, "").trim();
+          const modeName = titleText.replace(/💎 |🌍 |📊 |📈 |🔍 |🕵️ |レポート|結果|分析: |個別株分析: |テクニカル分析: |再調査/g, "").trim();
           const tickerMatch = titleText.match(/([A-Z0-9.^]+)$/);
           const ticker = tickerMatch ? tickerMatch[1] : (currentChartData.ticker || "");
           const currentStock = allStocks.find(s => s.ticker === ticker);
@@ -565,4 +672,15 @@ document.addEventListener("DOMContentLoaded", () => {
     chart.applyOptions({ width: chartContainer.clientWidth });
     kairiChart.applyOptions({ width: kairiContainer.clientWidth });
   });
+
+  // --- 12. トップへ戻るボタン ---
+  const scrollTopBtn = document.getElementById("scrollTopBtn");
+  if (scrollTopBtn) {
+      scrollTopBtn.addEventListener("click", () => {
+          const container = document.getElementById("analysis-container");
+          if (container) {
+              container.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }
+      });
+  }
 });

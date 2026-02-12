@@ -2,594 +2,510 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>日経225スマートAI分析</title>
 
-  <!-- 外部ライブラリの読み込み -->
-  <!-- Lightweight Charts: 高性能なチャート描画ライブラリ -->
-  <script src="https://unpkg.com/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.production.js"></script>
-  <!-- marked: AIからのMarkdown回答をHTMLに変換 -->
-  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-  <!-- Server-side PDF export enabled -->
+  <!-- Bootstrap 5 CSS -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <!-- Bootstrap Icons -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
   
-  <!-- 自作JavaScript（deferを付けてDOM構築後に実行） -->
+  <!-- Lightweight Charts -->
+  <script src="https://unpkg.com/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.production.js"></script>
+  <!-- marked -->
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+
+  <!-- Custom CSS -->
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  
+  <!-- Custom JS -->
   <script src="{{ url_for('static', filename='script.js') }}" defer></script>
-
-  <style>
-    /* 🎨 全体レイアウトと基本スタイル */
-    body { font-family: sans-serif; margin: 20px; background-color: #f9f9f9; color: #333; }
-    h2 { margin-bottom: 10px; }
-    
-    /* 📈 チャートエリアのスタイル */
-    #chart { width: 100%; max-width: 1200px; height: 400px; margin-top: 10px; background: #fff; }
-    #kairiChart { width: 100%; max-width: 1200px; height: 150px; margin-top: 10px; background: #fff; }
-    
-    /* 🛠️ 操作パネル（業種・銘柄選択） */
-    .controls { margin-bottom: 20px; padding: 15px; background: #fff; border: 1px solid #ddd; border-radius: 8px; }
-    label { font-weight: bold; margin-right: 5px; }
-    select { padding: 5px; margin-right: 20px; border-radius: 4px; border: 1px solid #ccc; }
-    
-    /* 📊 凡例（移動平均線の色説明） */
-    .legend { list-style: none; padding: 0; font-size: 0.9em; color: #555; margin-bottom: 15px; display: flex; gap: 15px; }
-
-    /* 🤖 AI分析セクションとボタン */
-    .analysis-section { margin-top: 30px; }
-    .analyze-area {
-      display: flex;
-      align-items: center;
-      gap: 15px;
-      margin-bottom: 15px;
-      flex-wrap: wrap;
-    }
-    
-    /* 🔄 ローディング表示のモダンなスタイル */
-    #loading-container {
-      display: none;
-      width: 100%;
-      padding: 15px;
-      background: #eef7ff;
-      border-radius: 8px;
-      margin: 10px 0;
-      border-left: 5px solid #0078d7;
-      animation: pulse 2s infinite ease-in-out;
-    }
-    @keyframes pulse {
-      0% { opacity: 0.6; }
-      50% { opacity: 1; }
-      100% { opacity: 0.6; }
-    }
-    .loading-content {
-      display: flex;
-      align-items: center;
-      gap: 15px;
-    }
-
-    .loader {
-      border: 3px solid #f3f3f3;
-      border-top: 3px solid #0078d7;
-      border-radius: 50%;
-      width: 20px;
-      height: 20px;
-      animation: spin 1s linear infinite;
-    }
-    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-
-    /* 📝 Markdown出力エリアのスタイル */
-    #analysisResult {
-      background: #fff;
-      padding: 25px;
-      border: 1px solid #ddd;
-      border-radius: 8px;
-      line-height: 1.8;
-      color: #333;
-      min-height: 100px;
-    }
-    #analysisResult h1, #analysisResult h2, #analysisResult h3 {
-      border-bottom: 1px solid #eee;
-      padding-bottom: 5px;
-      margin-top: 1.2em;
-    }
-    
-    /* --- 🔘 分析モード切り替えタブのスタイル --- */
-    .analysis-tabs {
-      display: flex;
-      gap: 5px;
-      margin-bottom: 10px;
-    }
-    .tab-btn {
-      padding: 8px 16px;
-      background: #eee;
-      border: 1px solid #ddd;
-      border-radius: 5px 5px 0 0;
-      cursor: pointer;
-      font-weight: bold;
-      color: #666;
-      transition: all 0.3s;
-    }
-    .tab-btn.active {
-      background: #fff;
-      border-bottom: 2px solid #0078d7;
-      color: #0078d7;
-    }
-    .tab-btn:hover:not(.active) {
-      background: #e5e5e5;
-    }
-
-    /* 🌍 市況分析フォームのスタイル */
-    #market-form-area {
-      display: none;
-      background: #fff;
-      padding: 20px;
-      border: 1px solid #ddd;
-      border-radius: 0 0 8px 8px;
-      margin-top: -10px;
-      margin-bottom: 20px;
-      animation: fadeIn 0.3s;
-    }
-    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-    .market-category { margin-bottom: 15px; }
-    .market-category h4 { margin: 0 0 8px 0; color: #555; font-size: 0.95em; border-left: 4px solid #0078d7; padding-left: 8px; }
-    .market-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; font-size: 0.9em; }
-    .market-grid label { display: flex; align-items: center; gap: 5px; cursor: pointer; }
-    .market-grid label:hover { color: #0078d7; }
-
-    /* ❓ ツールチップ（ヘルプマーク）のスタイル */
-    .help-icon {
-      display: inline-block;
-      width: 15px;
-      height: 15px;
-      line-height: 15px;
-      text-align: center;
-      border-radius: 50%;
-      background-color: #0078d7;
-      color: #fff;
-      font-size: 11px;
-      cursor: help;
-      margin-left: 4px;
-      position: relative;
-      vertical-align: middle;
-    }
-    .help-icon::after {
-      content: attr(data-tooltip);
-      position: absolute;
-      bottom: 125%;
-      left: 50%;
-      transform: translateX(-50%);
-      background-color: rgba(51, 51, 51, 0.95);
-      color: #fff;
-      padding: 10px 14px;
-      border-radius: 6px;
-      width: 400px;
-      max-width: 95vw;
-      font-size: 11px;
-      font-weight: normal;
-      line-height: 1.6;
-      visibility: hidden;
-      opacity: 0;
-      transition: opacity 0.2s;
-      z-index: 1000;
-      white-space: pre-line;
-      text-align: left;
-      box-shadow: 0 2px 10px rgba(0,0,0,0.3);
-      pointer-events: none;
-    }
-    .help-icon:hover::after {
-      visibility: visible;
-      opacity: 1;
-    }
-    .help-icon.bottom::after { bottom: auto; top: 125%; }
-
-  /* 📁 折りたたみセクションのスタイル */
-  details summary { cursor: pointer; font-weight: bold; color: #555; font-size: 0.9em; margin: 10px 0; outline: none; list-style: none; }
-  details summary::-webkit-details-marker { display: none; } /* Safari等用 */
-  .details-content { padding: 10px; border: 1px solid #eee; border-radius: 5px; background: #fafafa; }
-
-  /* 📜 分析履歴アイテムのスタイル */
-  .history-item {
-    transition: all 0.2s ease;
-    cursor: pointer;
-  }
-  .history-item:hover {
-    background-color: #f0f7ff;
-    border-color: #0078d7 !important;
-    transform: translateX(5px);
-  }
-  .history-item.active {
-    border-left: 5px solid #0078d7 !important;
-    background-color: #f0f7ff;
-  }
-  .history-select-container {
-    display: flex;
-    align-items: center;
-    padding: 0 15px;
-    border-right: 1px solid #eee;
-    background: #f8f9fa;
-  }
-  .history-content-link {
-    flex-grow: 1;
-    padding: 12px 15px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-  }
-
-  /* 🚀 実行ボタンのスタイル (グラデーションとアニメーションで強調) */
-    .run-analysis-trigger {
-      padding: 12px 30px;
-      background: linear-gradient(135.22deg, #0078d7 0%, #0056b3 100%);
-      color: white;
-      border: none;
-      border-radius: 50px; /* 丸みのあるモダンなボタン */
-      cursor: pointer;
-      font-weight: bold;
-      font-size: 1.1em;
-      letter-spacing: 1px;
-      box-shadow: 0 4px 15px rgba(0,120,215,0.3);
-      transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
-      position: relative;
-      overflow: hidden;
-    }
-    .run-analysis-trigger::before {
-      content: '';
-      position: absolute;
-      top: 0; left: -100%;
-      width: 100%; height: 100%;
-      background: linear-gradient(120deg, transparent, rgba(255,255,255,0.3), transparent);
-      transition: all 0.6s;
-    }
-    .run-analysis-trigger:hover:not(:disabled) {
-      background: linear-gradient(135.22deg, #0086f0 0%, #0062cc 100%);
-      transform: translateY(-2px) scale(1.03);
-      box-shadow: 0 6px 20px rgba(0,120,215,0.4);
-    }
-    .run-analysis-trigger:hover:not(:disabled)::before {
-      left: 100%;
-    }
-    .run-analysis-trigger:active:not(:disabled) {
-      transform: translateY(1px);
-      box-shadow: 0 2px 10px rgba(0,120,215,0.3);
-    }
-    .run-analysis-trigger:disabled {
-      background: #bdc3c7 !important; /* 明確な灰色 */
-      color: #ecf0f1;
-      cursor: not-allowed;
-      transform: none !important;
-      box-shadow: none !important;
-      opacity: 0.8;
-    }
-
-    button:hover { opacity: 0.8; }
-  </style>
 </head>
 
-<body>
+<body class="bg-light">
+
   <!-- 🏆 ヘッダー -->
-  <header style="background-color: #1a237e; color: white; padding: 20px; text-align: center; margin-bottom: 20px; border-bottom: 4px solid #ffd700;">
-      <h1 style="margin: 0; font-size: 28px; letter-spacing: 2px;">日経225スマートAI分析</h1>
-      <p style="margin: 5px 0 0; font-size: 14px; opacity: 0.8;">Advanced AI All-round Analysis</p>
+  <header class="mb-4" style="background: linear-gradient(135deg, #1a237e 0%, #283593 100%); color: white; padding: 20px 20px; text-align: center; border-bottom: 4px solid #ffd700; box-shadow: 0 4px 10px rgba(0,0,0,0.2);">
+      <h1 style="margin: 0; font-size: 24px; letter-spacing: 2px; font-weight: 700; text-shadow: 1px 1px 3px rgba(0,0,0,0.3);">
+        <i class="bi bi-graph-up-arrow" style="margin-right: 10px; color: #ffd700;"></i>日経225スマートAI分析
+      </h1>
+      <p style="margin: 5px 0 0; font-size: 13px; opacity: 0.9; font-weight: 300; letter-spacing: 1px;">Advanced AI All-round Analysis</p>
   </header>
 
-<div class="container">
-  <!-- 🛠️ 銘柄選択・履歴 -->
-  <div class="controls">
-    <label for="industrySelect">業種：</label>
-    <select id="industrySelect">
-      <option value="all">すべての業種</option>
-      {% for industry in industries %}
-        <option value="{{ industry }}">{{ industry }}</option>
-      {% endfor %}
-    </select>
+  <div class="container-fluid px-2" style="max-width: 98%;">
+    <div class="row g-4">
+      
+      <!-- 🛠️ 左カラム：コントロール & チャート -->
+      <div class="col-lg-12">
+        <div class="row g-4">
+          <!-- コントロールパネル -->
+          <div class="col-md-4 col-lg-3">
+            <div class="card h-100 shadow-sm">
+              <div class="card-header bg-white">
+                <i class="bi bi-sliders me-1"></i> 銘柄選択
+              </div>
+              <div class="card-body">
+                <div class="mb-3 position-relative">
+                  <label for="stockSearch" class="form-label fw-bold">銘柄検索</label>
+                  <div class="input-group">
+                      <span class="input-group-text bg-light"><i class="bi bi-search text-secondary"></i></span>
+                      <input type="text" id="stockSearch" class="form-control" placeholder="銘柄名・コードを入力..." autocomplete="off">
+                  </div>
+                  <div id="searchResults" class="list-group position-absolute w-100 shadow-lg" style="z-index: 1000; max-height: 300px; overflow-y: auto; display: none; top: 100%;">
+                      <!-- 検索候補がここに表示されます -->
+                  </div>
+                </div>
 
-    <label for="stockSelect">銘柄：</label>
-    <select id="stockSelect">
-      <option value="">銘柄を選択してください</option>
-    </select>
+                <div class="mb-3">
+                  <label for="industrySelect" class="form-label fw-bold">業種</label>
+                  <select id="industrySelect" class="form-select">
+                    <option value="all">すべての業種</option>
+                    {% for industry in industries %}
+                      <option value="{{ industry }}">{{ industry }}</option>
+                    {% endfor %}
+                  </select>
+                </div>
 
-    <div id="recentContainer" style="margin-top: 10px;">
-      <label style="font-size: 0.85em; color: #666;">最近見た銘柄：</label>
-      <div id="recentList" style="display: inline-flex; gap: 5px; flex-wrap: wrap; vertical-align: middle;">
-        <!-- JSでボタンが自動生成される -->
-      </div>
-    </div>
-  </div>
+                <div class="mb-3">
+                  <label for="stockSelect" class="form-label fw-bold">銘柄リスト</label>
+                  <select id="stockSelect" class="form-select">
+                    <option value="">銘柄を選択してください</option>
+                  </select>
+                </div>
 
-  <!-- 📈 株価統計・ファンダメンタルズ情報表示パネル -->
-  <div id="stockStats" style="display:none; background:#fff; padding:15px; border:1px solid #ddd; border-radius:8px; margin-bottom:15px; display: flex; gap: 20px; flex-wrap: wrap; align-items: stretch;">
-    <div style="flex:1; min-width:300px;">
-      <h4 style="margin:0 0 12px 0; border-bottom: 2px solid #eee; padding-bottom: 5px; color: #555;">
-          📈 基本統計 (直近の値)
-          <span class="help-icon" data-tooltip="※各情報は過去データに基づいて表示しているので，誤りを含む可能性があることに注意してください。">?</span>
-      </h4>
-      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 0.9em;">
-        <div>時価総額: <b id="statCap">--</b></div>
-        <div>利回り: <b id="statDiv">--</b></div>
-        <div>PER: <b id="statPER">--</b></div>
-        <div>PBR: <b id="statPBR">--</b></div>
-        <div>ROE: <b id="statROE">--</b></div>
-        <div>ROA: <b id="statROA">--</b></div>
-        <div>配当性向: <b id="statPayout">--</b></div>
-        <div>配当落ち日: <b id="statExDiv">--</b></div>
-      </div>
-      <div style="margin-top: 12px; display: flex; gap: 15px; font-size: 0.9em; border-top: 1px dashed #eee; padding-top: 10px;">
-        <span>最高値: <span id="statMax" style="font-weight:bold; color:red;">-</span></span>
-        <span>最安値: <span id="statMin" style="font-weight:bold; color:blue;">-</span></span>
-      </div>
-    </div>
-    <div style="flex:2; min-width:450px; background: #fff; padding: 10px; border-radius: 6px; border: 1px solid #eee;">
-      <h4 style="margin:0 0 10px 0; border-bottom: 2px solid #1a237e; padding-bottom: 5px;">🏢 AIによる会社説明</h4>
-      <div id="companyInfoContent" style="font-size: 0.85em; line-height: 1.6; color: #444;">
-          銘柄を選択するとAIが会社概要を調査します...
-      </div>
-      <!-- 隠し要素として出来高データを保持（分析機能用） -->
-      <ul id="statVolRanking" style="display: none;"></ul>
-    </div>
-  </div>
-  
-  <!-- 🗺️ 凡例 -->
-  <ul class="legend">
-    <li>メインチャート：<span style="color:green">●</span> 5SMA / <span style="color:red">●</span> 25SMA / <span style="color:blue">●</span> 75SMA</li>
-    <li>サブ：<span style="color:purple">●</span> 25日乖離率</li>
-  </ul>
-
-  <!-- 🖱️ マウスカーソル位置の株価詳細（OHLC）表示 -->
-  <div id="ohlc-display" style="margin-bottom: 5px; font-family: monospace; font-size: 14px; background: #f8f9fa; padding: 5px; border-radius: 4px; border: 1px solid #ddd;">
-    日付: -- 始値: -- 高値: -- 安値: -- 終値: -- 騰落率: --
-  </div>
-
-  <!-- 📊 チャート本体 -->
-  <div id="chart"></div>
-  <div id="kairiChart"></div>
-
-  <!-- 🤖 AI分析セクション -->
-  <div class="analysis-section">
-      <!-- 分析モード選択タブ -->
-      <div style="display: flex; align-items: center; flex-wrap: wrap; gap: 0; margin-bottom: 10px;">
-          <div class="analysis-tabs" style="display: flex; align-items: center; flex-wrap: wrap; gap: 0;">
-              <button class="tab-btn active" data-mode="full" title="Google検索で最新の決算やニュースを調査">🔍 個別株分析</button>
-              <button class="tab-btn" data-mode="volume" title="出来高が急増した日の背景を調査">📊 出来高分析</button>
-              <button class="tab-btn" data-mode="tech" title="チャートの形から今後の展開を予測">📈 テクニカル分析</button>
-              <button class="tab-btn" data-mode="market" title="最新ニュースから市場全体を分析">🌍 市況分析</button>
-              <button class="tab-btn" data-mode="total" title="過去の分析結果を統合して多角的に分析">💎 総合分析</button>
+                <div id="recentContainer" class="mt-4">
+                  <label class="form-label small text-muted">最近見た銘柄</label>
+                  <div id="recentList" class="d-flex flex-wrap gap-2">
+                    <!-- JSでボタンが自動生成される -->
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
-      </div>
 
-      <!-- 🌀 モダンなローディング表示エリア -->
-      <div id="loading-container">
-        <div class="loading-content">
-          <div id="loading-spinner" class="loader"></div>
-          <div id="loading-indicator" style="font-weight: bold; color: #0056b3; font-size: 0.95em;"></div>
+          <!-- チャートエリア -->
+          <div class="col-md-8 col-lg-9">
+            <div class="card shadow-sm mb-3">
+              <div class="card-header bg-white d-flex justify-content-between align-items-center py-2">
+                <div><i class="bi bi-activity me-1"></i> チャート</div>
+                <!-- マウスカーソル位置の株価詳細（OHLC） -->
+                <div id="ohlc-display" class="small font-monospace text-muted">
+                  日付: -- 始値: -- 高値: -- 安値: -- 終値: --
+                </div>
+              </div>
+              <div class="card-body p-2">
+                <div id="chart" style="height: 400px; width: 100%;"></div>
+                <div id="kairiChart" style="height: 150px; width: 100%; margin-top: 10px;"></div>
+                
+                <!-- 凡例 -->
+                <div class="mt-2 px-2">
+                  <ul class="legend mb-0 small">
+                    <li class="me-3"><i class="bi bi-circle-fill text-success" style="font-size: 8px;"></i> SMA(5)</li>
+                    <li class="me-3"><i class="bi bi-circle-fill text-danger" style="font-size: 8px;"></i> SMA(25)</li>
+                    <li class="me-3"><i class="bi bi-circle-fill text-primary" style="font-size: 8px;"></i> SMA(75)</li>
+                    <li><i class="bi bi-circle-fill" style="color: purple; font-size: 8px;"></i> 乖離率(25)</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
-      <!-- 分析結果の出力場所 -->
-      <div id="analysis-container" style="display: none; background: #fff; padding: 25px; border: 1px solid #ddd; border-radius: 8px; margin-bottom: 20px;">
-          <div id="analysisResult" style="border:none; padding:0; min-height: auto; margin-bottom: 20px;"></div>
-          <div class="analyze-area" style="display: flex; justify-content: flex-end; gap: 10px;">
-              <button id="exportPdfBtn" style="display: none; padding: 12px 20px; background: #6c757d; color: white; border: none; border-radius: 50px; cursor: pointer; font-weight: bold; transition: all 0.3s;">PDF保存</button>
+      <!-- 📈 下段：基本統計情報 -->
+      <div class="col-12">
+        <div id="stockStats" class="card shadow-sm" style="display:none !important;"> <!-- JSでdisplay:flexになるのを防ぐためclass制御したいがJS依存なのでstyleは残す -->
+          <div class="card-body">
+            <div class="row">
+              <div class="col-md-4 border-end">
+                <h5 class="card-title mb-3 text-secondary border-bottom pb-2">
+                  📈 基本統計 <i class="bi bi-question-circle text-muted help-icon" style="font-size: 0.85rem;" data-tooltip="※各情報は過去データに基づいて表示しているので，誤りを含む可能性があることに注意してください。"></i>
+                </h5>
+                <div class="row g-2 small">
+                  <div class="col-6">時価総額: <b id="statCap">--</b></div>
+                  <div class="col-6">利回り: <b id="statDiv">--</b></div>
+                  <div class="col-6">PER: <b id="statPER">--</b></div>
+                  <div class="col-6">PBR: <b id="statPBR">--</b></div>
+                  <div class="col-6">ROE: <b id="statROE">--</b></div>
+                  <div class="col-6">ROA: <b id="statROA">--</b></div>
+                  <div class="col-6">配当性向: <b id="statPayout">--</b></div>
+                  <div class="col-6">配当落ち日: <b id="statExDiv">--</b></div>
+                </div>
+                <div class="mt-3 pt-2 border-top small d-flex gap-3">
+                  <span>最高値: <span id="statMax" class="fw-bold text-danger">-</span></span>
+                  <span>最安値: <span id="statMin" class="fw-bold text-primary">-</span></span>
+                </div>
+              </div>
+              <div class="col-md-8">
+                <h5 class="card-title mb-3 text-primary border-bottom pb-2">🏢 AIによる会社説明</h5>
+                <div id="companyInfoContent" class="small text-muted" style="min-height: 100px;">
+                  銘柄を選択するとAIが会社概要を調査します...
+                </div>
+                <!-- 隠し要素 -->
+                <ul id="statVolRanking" style="display: none;"></ul>
+              </div>
+            </div>
           </div>
+        </div>
       </div>
 
-      <!-- 🌍 市況分析専用フォームエリア -->
-      <div id="market-form-area" style="display: none; background: #fff; padding: 20px; border: 1px solid #ddd; border-radius: 8px; margin-bottom: 20px; animation: fadeIn 0.3s;">
-          <div class="market-category">
-              <h4>📈 主要指標・全体市況 <span class="help-icon" data-tooltip="【主要指標・全体市況の説明】
-                ・日経平均: 東証プライムの主要225銘柄の平均株価
-                ・グロース: 新興企業中心の市場。金利上昇局面に弱い
-                ・S&P500: 米国の主要企業500社の株価指数
-                ・NASDAQ: 米国のハイテク銘柄中心の指数
-                ・VIX指数: 通称恐怖指数。市場の不安が高まると上昇
-                ・ドル円: 米ドル円の為替レート。日本市場への影響大
-                ・国債利回り: 為替レートの最大の変動要因">?</span>
-              </h4>
-              <div class="market-grid">
-                  <label><input type="checkbox" name="market_topic" value="日経平均"> 日経平均</label>
-                  <label><input type="checkbox" name="market_topic" value="グロース"> グロース</label>
-                  <label><input type="checkbox" name="market_topic" value="S&P500"> S&P500</label>
-                  <label><input type="checkbox" name="market_topic" value="NASDAQ"> NASDAQ</label>
-                  <label><input type="checkbox" name="market_topic" value="VIX"> VIX指数</label>
-                  <label><input type="checkbox" name="market_topic" value="ドル円"> ドル円</label>
-                  <label><input type="checkbox" name="market_topic" value="日本国債"> 日本国債</label>
-                  <label><input type="checkbox" name="market_topic" value="米国債"> 米国債</label>
-              </div>
+      <!-- 🤖 AI分析セクション -->
+      <div class="col-12 analysis-section">
+        <div class="card shadow-sm">
+          <div class="card-header bg-white p-0 border-bottom-0">
+            <!-- 分析モード選択タブ -->
+            <div class="analysis-tabs nav nav-tabs card-header-tabs m-0 px-3 pt-3 border-bottom-0" style="gap: 5px;">
+              <button class="nav-link active tab-btn" data-mode="full" title="Google検索で最新の決算やニュースを調査"><i class="bi bi-search"></i> 個別株分析</button>
+              <button class="nav-link tab-btn" data-mode="volume" title="出来高が急増した日の背景を調査"><i class="bi bi-bar-chart-fill"></i> 出来高分析</button>
+              <button class="nav-link tab-btn" data-mode="tech" title="チャートの形から今後の展開を予測"><i class="bi bi-graph-up"></i> テクニカル分析</button>
+              <button class="nav-link tab-btn" data-mode="market" title="最新ニュースから市場全体を分析"><i class="bi bi-globe"></i> 市況分析</button>
+              <button class="nav-link tab-btn" data-mode="total" title="過去の分析結果を統合して多角的に分析"><i class="bi bi-gem"></i> 総合分析</button>
+              <button class="nav-link tab-btn" data-mode="reresearch" title="既存の分析結果に対してさらに深掘り調査"><i class="bi bi-search-heart"></i> 再調査</button>
+            </div>
           </div>
-          <div class="market-category">
-              <h4>🏦 マクロ経済・金融政策 <span class="help-icon" data-tooltip="【マクロ経済・金融政策の説明】
-                  ・FRB: 米国の中央銀行。世界経済の舵取り役
-                  ・FOMC: 米国の金融政策。その影響は世界に及ぶ
-                  ・日銀: 日本の中央銀行。物価と通貨の安定を担う
-                  ・利上げ/利下げ: 景気や物価を調整する金融政策の基本
-                  ・米雇用統計: 金融政策及び世界の株価に直結するデータ
-                  ・米CPI(米消費者物価指数): インフレ率を測る重要指標">?</span>
-              </h4>
-              <div class="market-grid">
-                  <label><input type="checkbox" name="market_topic" value="FRB"> FRB</label>
-                  <label><input type="checkbox" name="market_topic" value="FOMC"> FOMC</label>
-                  <label><input type="checkbox" name="market_topic" value="日銀"> 日銀</label>
-                  <label><input type="checkbox" name="market_topic" value="利上げ"> 利上げ</label>
-                  <label><input type="checkbox" name="market_topic" value="利下げ"> 利下げ</label>
-                  <label><input type="checkbox" name="market_topic" value="米雇用統計"> 米雇用統計</label>
-                  <label><input type="checkbox" name="market_topic" value="CPI"> 米CPI</label>
+
+          <div class="card-body bg-light">
+            <!-- 🌀 ローディング -->
+            <div id="loading-container">
+              <div class="loading-content">
+                <div class="spinner-border text-primary" role="status" id="loading-spinner"></div>
+                <div id="loading-indicator" class="fw-bold text-primary"></div>
               </div>
-          </div>
-          <div class="market-category">
-              <h4>🚀 主要セクターワード <span class="help-icon" data-tooltip="【注目のセクター・産業の説明】
-                  ・半導体: あらゆるAIや機械の核となる産業
-                  ・生成AI: 近年市場規模を急拡大。バブル懸念の噂も
-                  ・データセンタ: AI・クラウドの影響で需要急増中
-                  ・防衛: 近年の世界的なトレンド。防衛費が鍵
-                  ・金: 安定資産。景気懸念や通貨価値下落局面で強い
-                  ・原油: 経済活動の基本資源。物価や企業業績に直結
-                  ・ビットコイン: 最もメジャーな暗号資産。値動きが激しめ">?</span>
-              </h4>
-              <div class="market-grid">
-                  <label><input type="checkbox" name="market_topic" value="半導体"> 半導体</label>
-                  <label><input type="checkbox" name="market_topic" value="生成AI"> 生成AI</label>
-                  <label><input type="checkbox" name="market_topic" value="データセンタ"> データセンタ</label>
-                  <label><input type="checkbox" name="market_topic" value="防衛株"> 防衛</label>
-                  <label><input type="checkbox" name="market_topic" value="金価格"> 金</label>
-                  <label><input type="checkbox" name="market_topic" value="原油価格"> 原油</label>
-                  <label><input type="checkbox" name="market_topic" value="ビットコイン"> 暗号資産</label>
+            </div>
+
+            <!-- 分析結果出力 -->
+            <div id="analysis-container" style="display: none;" class="bg-white p-4 rounded border mb-4">
+              <div class="d-flex justify-content-end mb-3">
+                <button id="exportPdfBtn" class="btn btn-danger rounded-pill px-5 py-2 shadow fw-bold" style="display: none; font-size: 1.1em; transition: transform 0.2s;">
+                  <i class="bi bi-file-earmark-pdf-fill me-2"></i> PDF出力
+                </button>
               </div>
-          </div>
-          <div class="market-category">
-              <h4>🌏 企業活動ワード <span class="help-icon" data-tooltip="【企業活動・トレンドの説明】
-                ・決算発表: 企業の業績報告。株価変動の最大要因
-                ・上方/下方修正: 業績予想の修正。突然発表することも
-                ・株主還元: 株主に利益を還元する活動全般
-                ・増配: 配当を増やすこと。株価下支えの最大要因
-                ・自社株買い: 自社株を買うこと。買付数や期間も重要">?</span>
-              </h4>
-              <div class="market-grid">
-                  <label><input type="checkbox" name="market_topic" value="決算発表"> 決算発表</label>
-                  <label><input type="checkbox" name="market_topic" value="上方修正"> 上方修正</label>
-                  <label><input type="checkbox" name="market_topic" value="下方修正"> 下方修正</label>
-                  <label><input type="checkbox" name="market_topic" value="株主還元"> 株主還元</label>
-                  <label><input type="checkbox" name="market_topic" value="増配"> 増配</label>
-                  <label><input type="checkbox" name="market_topic" value="自社株買い"> 自社株買い</label>
-              </div>
-          </div>
-          <div class="market-category">
-              <h4>🔍 自由ワード検索 <span class="help-icon" data-tooltip="【自由ワード検索の説明】
-                入力されたワードに従ってニュース調査を行ないます。
-                ニュースとして取り上げられにくいワードの場合
-                正常に分析結果が出力されない場合があります。">?</span></h4>
-              <input type="text" id="market_free_keyword" placeholder="例: 東京証券取引所" style="width: 100%; box-sizing: border-box; padding: 8px; margin-bottom: 10px; border: 1px solid #ccc; border-radius: 4px;">
+              <div id="analysisResult" class="markdown-body"></div>
               
-              <details>
-                  <summary>📁 その他キーワード案（クリックで展開）</summary>
-                  <div class="details-content">
-                      <div class="market-grid">
-                          <label><input type="checkbox" name="market_topic" value="円安"> 円安</label>
-                          <label><input type="checkbox" name="market_topic" value="円高"> 円高</label>
-                          <label><input type="checkbox" name="market_topic" value="IMM通貨"> IMM通貨先物</label>
-                          <label><input type="checkbox" name="market_topic" value="ユーロ"> ユーロ</label>
-                          <label><input type="checkbox" name="market_topic" value="ポンド"> ポンド</label>
-                          <label><input type="checkbox" name="market_topic" value="スイスフラン"> スイスフラン</label>
-                          <label><input type="checkbox" name="market_topic" value="新興国"> 新興国</label>
-                          <label><input type="checkbox" name="market_topic" value="日本政府"> 日本政府</label>
-                          <label><input type="checkbox" name="market_topic" value="米政府"> 米政府</label>
-                          <label><input type="checkbox" name="market_topic" value="植田総裁"> 植田総裁</label>
-                          <label><input type="checkbox" name="market_topic" value="パウエル議長"> パウエル議長</label>
-                          <label><input type="checkbox" name="market_topic" value="GDP"> GDP</label>
-                          <label><input type="checkbox" name="market_topic" value="景気後退"> 景気後退</label>
-                          <label><input type="checkbox" name="market_topic" value="人工知能"> 人工知能</label>
-                          <label><input type="checkbox" name="market_topic" value="銀行"> 銀行</label>
-                          <label><input type="checkbox" name="market_topic" value="量子"> 量子</label>
-                          <label><input type="checkbox" name="market_topic" value="自動車"> 自動車</label>
-                          <label><input type="checkbox" name="market_topic" value="原子力"> 原子力</label>
-                          <label><input type="checkbox" name="market_topic" value="インバウンド"> インバウンド</label>
-                          <label><input type="checkbox" name="market_topic" value="中国関連"> 中国関連</label>
-                          <label><input type="checkbox" name="market_topic" value="ハイテク関連"> ハイテク関連</label>
-                          <label><input type="checkbox" name="market_topic" value="情報通信"> 情報通信</label>
-                          <label><input type="checkbox" name="market_topic" value="小売"> 小売</label>
-                          <label><input type="checkbox" name="market_topic" value="商社"> 商社</label>
-                          <label><input type="checkbox" name="market_topic" value="ゲーム"> ゲーム</label>
-                          <label><input type="checkbox" name="market_topic" value="インフラ"> インフラ</label>
-                          <label><input type="checkbox" name="market_topic" value="建設"> 建設</label>
-                          <label><input type="checkbox" name="market_topic" value="TOB"> TOB</label>
-                          <label><input type="checkbox" name="market_topic" value="M&A"> M&A</label>
-                          <label><input type="checkbox" name="market_topic" value="IPO"> IPO</label>
-                          <label><input type="checkbox" name="market_topic" value="地政学リスク"> 地政学リスク</label>
-                          <label><input type="checkbox" name="market_topic" value="強気相場"> 強気相場</label>
-                          <label><input type="checkbox" name="market_topic" value="弱気相場"> 弱気相場</label>
-                          <label><input type="checkbox" name="market_topic" value="押し目"> 押し目</label>
-                          <label><input type="checkbox" name="market_topic" value="利益確定"> 利益確定</label>
-                          <label><input type="checkbox" name="checkbox" name="market_topic" value="踏み上げ"> 踏み上げ</label>
-                      </div>
-                  </div>
-              </details>
-          </div>
-
-          <div class="market-category">
-              <h4>⚙️ オプション設定 <span class="help-icon" data-tooltip="【オプション設定の説明】
-                  ・詳細分析: リスク要因，市場心理，変動幅も分析
-                  ・業種別分析: 各業種にフォーカスした分析
-                  ・短期分析: 直近1週間に絞った分析
-                  ・中期分析: 直近1ヶ月間に絞った分析
-                  ・テクニカル分析: 移動平均線，トレンド，支持線，抵抗線，出来高について分析
-                  ・初心者向け説明: 金融用語に※印の注釈を付与">?</span>
-              </h4>
-              <div class="market-grid">
-                  <label><input type="checkbox" id="m_deep"> +詳細分析</label>
-                  <label><input type="checkbox" id="m_sector"> +業種別分析</label>
-                  <label><input type="checkbox" id="m_short"> +短期分析</label>
-                  <label><input type="checkbox" id="m_mid"> +中期分析</label>
-                  <label><input type="checkbox" id="m_tech"> +テクニカル分析</label>
-                  <label><input type="checkbox" id="m_beginner"> +初心者向け</label>
+              <!-- トップへ戻るボタン -->
+              <div class="text-center mt-4 border-top pt-3">
+                <button id="scrollTopBtn" class="btn btn-light rounded-circle border shadow-sm" title="結果の先頭へ戻る" style="width: 45px; height: 45px;">
+                    <i class="bi bi-arrow-up text-primary"></i>
+                </button>
               </div>
-          </div>
-      </div>
+            </div>
 
-      <!-- 各分析モードの案内ウィンドウ（実行ボタンを中に配置） -->
-      <div id="full-analysis-guide" class="analysis-guide" style="background:#e3f2fd; padding:20px; border-radius:8px; margin-bottom:15px; border-left: 5px solid #2196f3; position: relative;">
-          <h4 style="margin-top:0;">🔍 個別株分析モード</h4>
-          <p style="font-size:0.9em; margin-bottom:15px;">
-              最新の決算情報、株価動向、需給状況（信用倍率）、アナリスト評価などをGoogle検索を用いて多角的に調査・分析します。<br>
-              企業のファンダメンタルズに基づいた中長期的な投資判断に最適です。
-          </p>
-          <div style="display: flex; justify-content: flex-end;">
-              <button class="run-analysis-trigger" data-mode="full" style="padding: 10px 25px; background: linear-gradient(135.22deg, #0078d7 0%, #0056b3 100%); color: white; border: none; border-radius: 50px; cursor: pointer; font-weight: bold; box-shadow: 0 4px 10px rgba(0,120,215,0.3);">個別株分析を実行する 🚀</button>
-          </div>
-      </div>
+            <!-- 🕵️ 再調査フォーム -->
+            <div id="reresearch-form-area" class="bg-white p-4 rounded border mb-4 shadow-sm" style="display: none;">
+                <div class="row g-4">
+                    <!-- ❶ AI深掘り調査 -->
+                    <div class="col-md-6 border-end">
+                        <h6 class="border-start border-4 border-info ps-2 mb-3 text-secondary">
+                            ❶ AI深掘り調査 (矛盾・疑問点の洗い出し)
+                            <i class="bi bi-question-circle text-muted help-icon" style="font-size: 0.85rem;" data-tooltip="【機能説明】
+                            選択した過去のレポートをAIが読み込み、
+                            情報の不足点や論理の矛盾点、
+                            新たに生じた疑問点をAI自らが発見し、
+                            Google検索で追加調査を行います。"></i>
+                        </h6>
+                        <p class="small text-muted mb-3">
+                            下の「分析履歴」から対象のレポートを選択(チェック)してください。<br>
+                            AIが自ら問いを立てて深掘りします。
+                        </p>
+                        <div class="text-center mt-4">
+                            <button class="run-analysis-trigger btn btn-gradient-reresearch rounded-pill px-4" data-mode="reresearch_auto">
+                                AI深掘り調査を実行 🚀
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- ❷ ユーザー指定調査 -->
+                    <div class="col-md-6">
+                        <h6 class="border-start border-4 border-info ps-2 mb-3 text-secondary">
+                            ❷ ユーザー指定調査 (疑問の解消)
+                            <i class="bi bi-question-circle text-muted help-icon" style="font-size: 0.85rem;" data-tooltip="【機能説明】
+                            選択したレポートの内容を踏まえた上で、
+                            あなたが入力した具体的な質問に対して
+                            Google検索を用いて回答します。"></i>
+                        </h6>
+                        <p class="small text-muted mb-2">
+                            下の「分析履歴」から対象のレポートを選択し、
+                            疑問点を入力してください。
+                        </p>
+                        <textarea id="user_question" class="form-control mb-3" rows="3" placeholder="例: この銘柄の競合他社は何？優位性は？"></textarea>
+                        <div class="text-center">
+                            <button class="run-analysis-trigger btn btn-gradient-reresearch rounded-pill px-4" data-mode="reresearch_manual">
+                                ユーザー指定調査を実行 🚀
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
 
-      <div id="volume-analysis-guide" class="analysis-guide" style="display:none; background:#e3f2fd; padding:20px; border-radius:8px; margin-bottom:15px; border-left: 5px solid #2196f3; position: relative;">
-          <h4 style="margin-top:0;">📊 出来高分析モード</h4>
-          <p style="font-size:0.9em; margin-bottom:15px;">
-              過去1年間の出来高急増日を特定し、その日に市場でどのようなニュースやイベントが発生したのか、投資家心理はどう動いたのかを調査します。<br>
-              株価が大きく動くきっかけとなった「材料」を掘り下げるのに役立ちます。
-          </p>
-          <div style="display: flex; justify-content: flex-end;">
-              <button class="run-analysis-trigger" data-mode="volume" style="padding: 10px 25px; background: linear-gradient(135.22deg, #0078d7 0%, #0056b3 100%); color: white; border: none; border-radius: 50px; cursor: pointer; font-weight: bold; box-shadow: 0 4px 10px rgba(0,120,215,0.3);">出来高分析を実行する 🚀</button>
-          </div>
-      </div>
+            <!-- 🌍 市況分析フォーム -->
+            <div id="market-form-area" class="bg-white p-4 rounded border mb-4 shadow-sm" style="display: none;">
+              <div class="row g-4">
+                <div class="col-md-6 col-lg-3">
+                  <h6 class="border-start border-4 border-primary ps-2 mb-3 text-secondary">
+                      📈 主要指標・全体市況
+                      <i class="bi bi-question-circle text-muted help-icon" style="font-size: 0.85rem;" data-tooltip="【主要指標・全体市況の説明】
+                      ・日経平均: 東証プライムの主要225銘柄の平均株価
+                      ・グロース: 新興企業中心の市場。金利上昇局面に弱い
+                      ・S&P500: 米国の主要企業500社の株価指数
+                      ・NASDAQ: 米国のハイテク銘柄中心の指数
+                      ・VIX指数: 通称恐怖指数。市場の不安が高まると上昇
+                      ・ドル円: 米ドル円の為替レート。日本市場への影響大
+                      ・国債利回り: 為替レートの最大の変動要因"></i>
+                  </h6>
+                  <div class="market-grid">
+                    <label class="form-check-label"><input type="checkbox" class="form-check-input" name="market_topic" value="日経平均"> 日経平均</label>
+                    <label class="form-check-label"><input type="checkbox" class="form-check-input" name="market_topic" value="グロース"> グロース</label>
+                    <label class="form-check-label"><input type="checkbox" class="form-check-input" name="market_topic" value="S&P500"> S&P500</label>
+                    <label class="form-check-label"><input type="checkbox" class="form-check-input" name="market_topic" value="NASDAQ"> NASDAQ</label>
+                    <label class="form-check-label"><input type="checkbox" class="form-check-input" name="market_topic" value="VIX"> VIX指数</label>
+                    <label class="form-check-label"><input type="checkbox" class="form-check-input" name="market_topic" value="ドル円"> ドル円</label>
+                    <label class="form-check-label"><input type="checkbox" class="form-check-input" name="market_topic" value="日本国債"> 日本国債</label>
+                    <label class="form-check-label"><input type="checkbox" class="form-check-input" name="market_topic" value="米国債"> 米国債</label>
+                  </div>
+                </div>
+                <div class="col-md-6 col-lg-3">
+                  <h6 class="border-start border-4 border-primary ps-2 mb-3 text-secondary">
+                      🏦 マクロ経済
+                      <i class="bi bi-question-circle text-muted help-icon" style="font-size: 0.85rem;" data-tooltip="【マクロ経済・金融政策の説明】
+                      ・FRB: 米国の中央銀行。世界経済の舵取り役
+                      ・FOMC: 米国の金融政策。その影響は世界に及ぶ
+                      ・日銀: 日本の中央銀行。物価と通貨の安定を担う
+                      ・利上げ/利下げ: 景気や物価を調整する金融政策の基本
+                      ・米雇用統計: 金融政策及び世界の株価に直結するデータ
+                      ・米CPI(米消費者物価指数): インフレ率を測る重要指標"></i>
+                  </h6>
+                  <div class="market-grid">
+                    <label class="form-check-label"><input type="checkbox" class="form-check-input" name="market_topic" value="FRB"> FRB</label>
+                    <label class="form-check-label"><input type="checkbox" class="form-check-input" name="market_topic" value="FOMC"> FOMC</label>
+                    <label class="form-check-label"><input type="checkbox" class="form-check-input" name="market_topic" value="日銀"> 日銀</label>
+                    <label class="form-check-label"><input type="checkbox" class="form-check-input" name="market_topic" value="利上げ"> 利上げ</label>
+                    <label class="form-check-label"><input type="checkbox" class="form-check-input" name="market_topic" value="利下げ"> 利下げ</label>
+                    <label class="form-check-label"><input type="checkbox" class="form-check-input" name="market_topic" value="米雇用統計"> 米雇用統計</label>
+                    <label class="form-check-label"><input type="checkbox" class="form-check-input" name="market_topic" value="CPI"> 米CPI</label>
+                  </div>
+                </div>
+                <div class="col-md-6 col-lg-3">
+                  <h6 class="border-start border-4 border-primary ps-2 mb-3 text-secondary">
+                      🚀 主要セクター
+                      <i class="bi bi-question-circle text-muted help-icon" style="font-size: 0.85rem;" data-tooltip="【注目のセクター・産業の説明】
+                      ・半導体: あらゆるAIや機械の核となる産業
+                      ・生成AI: 近年市場規模を急拡大。バブル懸念の噂も
+                      ・データセンタ: AI・クラウドの影響で需要急増中
+                      ・防衛: 近年の世界的なトレンド。防衛費が鍵
+                      ・金: 安定資産。景気懸念や通貨価値下落局面で強い
+                      ・原油: 経済活動の基本資源。物価や企業業績に直結
+                      ・ビットコイン: 最もメジャーな暗号資産。値動きが激しめ"></i>
+                  </h6>
+                  <div class="market-grid">
+                    <label class="form-check-label"><input type="checkbox" class="form-check-input" name="market_topic" value="半導体"> 半導体</label>
+                    <label class="form-check-label"><input type="checkbox" class="form-check-input" name="market_topic" value="生成AI"> 生成AI</label>
+                    <label class="form-check-label"><input type="checkbox" class="form-check-input" name="market_topic" value="データセンタ"> データセンタ</label>
+                    <label class="form-check-label"><input type="checkbox" class="form-check-input" name="market_topic" value="防衛株"> 防衛</label>
+                    <label class="form-check-label"><input type="checkbox" class="form-check-input" name="market_topic" value="金価格"> 金</label>
+                    <label class="form-check-label"><input type="checkbox" class="form-check-input" name="market_topic" value="原油価格"> 原油</label>
+                    <label class="form-check-label"><input type="checkbox" class="form-check-input" name="market_topic" value="ビットコイン"> 暗号資産</label>
+                  </div>
+                </div>
+                <div class="col-md-6 col-lg-3">
+                  <h6 class="border-start border-4 border-primary ps-2 mb-3 text-secondary">
+                      🌏 企業活動
+                      <i class="bi bi-question-circle text-muted help-icon" style="font-size: 0.85rem;" data-tooltip="【企業活動・トレンドの説明】
+                      ・決算発表: 企業の業績報告。株価変動の最大要因
+                      ・上方/下方修正: 業績予想の修正。突然発表することも
+                      ・株主還元: 株主に利益を還元する活動全般
+                      ・増配: 配当を増やすこと。株価下支えの最大要因
+                      ・自社株買い: 自社株を買うこと。買付数や期間も重要"></i>
+                  </h6>
+                  <div class="market-grid">
+                    <label class="form-check-label"><input type="checkbox" class="form-check-input" name="market_topic" value="決算発表"> 決算発表</label>
+                    <label class="form-check-label"><input type="checkbox" class="form-check-input" name="market_topic" value="上方修正"> 上方修正</label>
+                    <label class="form-check-label"><input type="checkbox" class="form-check-input" name="market_topic" value="下方修正"> 下方修正</label>
+                    <label class="form-check-label"><input type="checkbox" class="form-check-input" name="market_topic" value="株主還元"> 株主還元</label>
+                    <label class="form-check-label"><input type="checkbox" class="form-check-input" name="market_topic" value="増配"> 増配</label>
+                    <label class="form-check-label"><input type="checkbox" class="form-check-input" name="market_topic" value="自社株買い"> 自社株買い</label>
+                  </div>
+                </div>
+              </div>
+              
+              <div class="mt-4 pt-3 border-top">
+                <div class="row">
+                  <div class="col-md-6">
+                    <label class="form-label small fw-bold">
+                        🔍 自由ワード検索
+                        <i class="bi bi-question-circle text-muted help-icon" style="font-size: 0.85rem;" data-tooltip="【自由ワード検索の説明】
+                        入力されたワードに従ってニュース調査を行ないます。
+                        ニュースとして取り上げられにくいワードの場合
+                        正常に分析結果が出力されない場合があります。"></i>
+                    </label>
+                    <input type="text" id="market_free_keyword" class="form-control mb-2" placeholder="例: 東京証券取引所">
+                    
+                    <details>
+                        <summary class="small text-muted">📁 その他キーワード案（クリックで展開）</summary>
+                        <div class="details-content mt-2 p-2 border rounded bg-light small">
+                            <div class="d-flex flex-wrap gap-2">
+                                <label class="form-check-label"><input type="checkbox" class="form-check-input" name="market_topic" value="円安"> 円安</label>
+                                <label class="form-check-label"><input type="checkbox" class="form-check-input" name="market_topic" value="円高"> 円高</label>
+                                <label class="form-check-label"><input type="checkbox" class="form-check-input" name="market_topic" value="IMM通貨"> IMM通貨</label>
+                                <label class="form-check-label"><input type="checkbox" class="form-check-input" name="market_topic" value="ユーロ"> ユーロ</label>
+                                <label class="form-check-label"><input type="checkbox" class="form-check-input" name="market_topic" value="ポンド"> ポンド</label>
+                                <label class="form-check-label"><input type="checkbox" class="form-check-input" name="market_topic" value="スイスフラン"> スイスフラン</label>
+                                <label class="form-check-label"><input type="checkbox" class="form-check-input" name="market_topic" value="新興国"> 新興国</label>
+                                <label class="form-check-label"><input type="checkbox" class="form-check-input" name="market_topic" value="日本政府"> 日本政府</label>
+                                <label class="form-check-label"><input type="checkbox" class="form-check-input" name="market_topic" value="米政府"> 米政府</label>
+                                <label class="form-check-label"><input type="checkbox" class="form-check-input" name="market_topic" value="植田総裁"> 植田総裁</label>
+                                <label class="form-check-label"><input type="checkbox" class="form-check-input" name="market_topic" value="パウエル議長"> パウエル議長</label>
+                                <label class="form-check-label"><input type="checkbox" class="form-check-input" name="market_topic" value="GDP"> GDP</label>
+                                <label class="form-check-label"><input type="checkbox" class="form-check-input" name="market_topic" value="景気後退"> 景気後退</label>
+                                <label class="form-check-label"><input type="checkbox" class="form-check-input" name="market_topic" value="人工知能"> 人工知能</label>
+                                <label class="form-check-label"><input type="checkbox" class="form-check-input" name="market_topic" value="銀行"> 銀行</label>
+                                <label class="form-check-label"><input type="checkbox" class="form-check-input" name="market_topic" value="量子"> 量子</label>
+                                <label class="form-check-label"><input type="checkbox" class="form-check-input" name="market_topic" value="自動車"> 自動車</label>
+                                <label class="form-check-label"><input type="checkbox" class="form-check-input" name="market_topic" value="原子力"> 原子力</label>
+                                <label class="form-check-label"><input type="checkbox" class="form-check-input" name="market_topic" value="インバウンド"> インバウンド</label>
+                                <label class="form-check-label"><input type="checkbox" class="form-check-input" name="market_topic" value="中国関連"> 中国関連</label>
+                                <label class="form-check-label"><input type="checkbox" class="form-check-input" name="market_topic" value="ハイテク関連"> ハイテク関連</label>
+                                <label class="form-check-label"><input type="checkbox" class="form-check-input" name="market_topic" value="情報通信"> 情報通信</label>
+                                <label class="form-check-label"><input type="checkbox" class="form-check-input" name="market_topic" value="小売"> 小売</label>
+                                <label class="form-check-label"><input type="checkbox" class="form-check-input" name="market_topic" value="商社"> 商社</label>
+                                <label class="form-check-label"><input type="checkbox" class="form-check-input" name="market_topic" value="ゲーム"> ゲーム</label>
+                                <label class="form-check-label"><input type="checkbox" class="form-check-input" name="market_topic" value="インフラ"> インフラ</label>
+                                <label class="form-check-label"><input type="checkbox" class="form-check-input" name="market_topic" value="建設"> 建設</label>
+                                <label class="form-check-label"><input type="checkbox" class="form-check-input" name="market_topic" value="TOB"> TOB</label>
+                                <label class="form-check-label"><input type="checkbox" class="form-check-input" name="market_topic" value="M&A"> M&A</label>
+                                <label class="form-check-label"><input type="checkbox" class="form-check-input" name="market_topic" value="IPO"> IPO</label>
+                                <label class="form-check-label"><input type="checkbox" class="form-check-input" name="market_topic" value="地政学リスク"> 地政学リスク</label>
+                                <label class="form-check-label"><input type="checkbox" class="form-check-input" name="market_topic" value="強気相場"> 強気相場</label>
+                                <label class="form-check-label"><input type="checkbox" class="form-check-input" name="market_topic" value="弱気相場"> 弱気相場</label>
+                                <label class="form-check-label"><input type="checkbox" class="form-check-input" name="market_topic" value="押し目"> 押し目</label>
+                                <label class="form-check-label"><input type="checkbox" class="form-check-input" name="market_topic" value="利益確定"> 利益確定</label>
+                                <label class="form-check-label"><input type="checkbox" class="form-check-input" name="market_topic" value="踏み上げ"> 踏み上げ</label>
+                            </div>
+                        </div>
+                    </details>
+                  </div>
+                  <div class="col-md-6">
+                    <label class="form-label small fw-bold">
+                        ⚙️ オプション設定
+                        <i class="bi bi-question-circle text-muted help-icon" style="font-size: 0.85rem;" data-tooltip="【オプション設定の説明】
+                        ・詳細分析: リスク要因，市場心理，変動幅も分析
+                        ・業種別分析: 各業種にフォーカスした分析
+                        ・短期分析: 直近1週間に絞った分析
+                        ・中期分析: 直近1ヶ月間に絞った分析
+                        ・テクニカル分析: 移動平均線，トレンド，支持線，抵抗線，出来高について分析
+                        ・初心者向け説明: 金融用語に※印の注釈を付与"></i>
+                    </label>
+                    <div class="d-flex flex-wrap gap-3 mt-2 small">
+                      <label class="form-check-label"><input type="checkbox" class="form-check-input" id="m_deep"> 詳細分析</label>
+                      <label class="form-check-label"><input type="checkbox" class="form-check-input" id="m_sector"> 業種別</label>
+                      <label class="form-check-label"><input type="checkbox" class="form-check-input" id="m_short"> 短期</label>
+                      <label class="form-check-label"><input type="checkbox" class="form-check-input" id="m_mid"> 中期</label>
+                      <label class="form-check-label"><input type="checkbox" class="form-check-input" id="m_tech"> テクニカル</label>
+                      <label class="form-check-label"><input type="checkbox" class="form-check-input" id="m_beginner"> 初心者向け</label>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
 
-      <div id="tech-analysis-guide" class="analysis-guide" style="display:none; background:#e3f2fd; padding:20px; border-radius:8px; margin-bottom:15px; border-left: 5px solid #2196f3; position: relative;">
-          <h4 style="margin-top:0;">📈 テクニカル分析モード</h4>
-          <p style="font-size:0.9em; margin-bottom:15px;">
-              直近1年間のチャートデータ（移動平均線の乖離率や収束、支持線・抵抗線）に基づき、現在のトレンドと今後の展望をAIが分析します。<br>
-              売られすぎ・買われすぎの判断や、売買タイミングの検討に最適です。
-          </p>
-          <div style="display: flex; justify-content: flex-end;">
-              <button class="run-analysis-trigger" data-mode="tech" style="padding: 10px 25px; background: linear-gradient(135.22deg, #0078d7 0%, #0056b3 100%); color: white; border: none; border-radius: 50px; cursor: pointer; font-weight: bold; box-shadow: 0 4px 10px rgba(0,120,215,0.3);">テクニカル分析を実行する 🚀</button>
-          </div>
-      </div>
+            <!-- 各分析モードの案内ウィンドウ -->
+            <div id="full-analysis-guide" class="analysis-guide alert alert-light border-start border-4 border-primary shadow-sm">
+              <h5 class="alert-heading text-primary"><i class="bi bi-search"></i> 個別株分析モード</h5>
+              <p class="small text-muted mb-3">
+                  最新の決算情報、株価動向、需給状況（信用倍率）、アナリスト評価などをGoogle検索を用いて多角的に調査・分析します。<br>
+                  企業のファンダメンタルズに基づいた中長期的な分析に最適です。
+              </p>
+              <div class="text-end">
+                <button class="run-analysis-trigger btn btn-gradient-full rounded-pill px-4" data-mode="full">
+                  個別株分析を実行する 🚀
+                </button>
+              </div>
+            </div>
 
-      <div id="market-analysis-guide" class="analysis-guide" style="display:none; background:#e3f2fd; padding:20px; border-radius:8px; margin-bottom:15px; border-left: 5px solid #2196f3; position: relative;">
-          <h4 style="margin-top:0;">🌍 市況分析モード</h4>
-          <p style="font-size:0.9em; margin-bottom:15px;">
-              主要な経済ニュースやキーワードを選択し、それらが株式市場全体や特定のセクターにどのような影響を与えているかを構造的に分析します。<br>
-              マクロ経済の動向や、現在の「相場のテーマ」を把握するのに役立ちます。<br><br>
-              ※キーワードを選択しすぎると、ニュースが適切に抽出できない場合があります。
-          </p>
-          <div style="display: flex; justify-content: flex-end;">
-              <button class="run-analysis-trigger" data-mode="market" style="padding: 10px 25px; background: linear-gradient(135.22deg, #0078d7 0%, #0056b3 100%); color: white; border: none; border-radius: 50px; cursor: pointer; font-weight: bold; box-shadow: 0 4px 10px rgba(0,120,215,0.3);">市況分析を実行する 🚀</button>
-          </div>
-      </div>
+            <div id="volume-analysis-guide" class="analysis-guide alert alert-light border-start border-4 border-primary shadow-sm" style="display:none;">
+              <h5 class="alert-heading text-primary"><i class="bi bi-bar-chart-fill"></i> 出来高分析モード</h5>
+              <p class="small text-muted mb-3">
+                  過去1年間の出来高が多かった日について、その日に市場でどのようなイベントが発生したのかを調査します。<br>
+                  株価が大きく動くきっかけとなった「材料」を掘り下げるのに役立ちます。
+              </p>
+              <div class="text-end">
+                <button class="run-analysis-trigger btn btn-gradient-volume rounded-pill px-4" data-mode="volume">
+                  出来高分析を実行する 🚀
+                </button>
+              </div>
+            </div>
 
-      <div id="total-analysis-guide" class="analysis-guide" style="display:none; background:#e3f2fd; padding:20px; border-radius:8px; margin-bottom:15px; border-left: 5px solid #2196f3; position: relative;">
-          <h4 style="margin-top:0;">💎 総合分析モード</h4>
-          <p style="font-size:0.9em; margin-bottom:15px;">
-              下の「分析履歴」から、統合して分析したい複数のレポートを選択して実行してください。<br>
-              異なる視点の情報をAIが整理・統合し、最終的な投資戦略を提案します。<br><br>
-              【オススメの使い方】<br>
-              ❶銘柄詳細を知るために各種分析レポートを選択して総合分析<br>
-              ❷同業他社の個別株分析レポートを複数選択して総合分析
+            <div id="tech-analysis-guide" class="analysis-guide alert alert-light border-start border-4 border-primary shadow-sm" style="display:none;">
+              <h5 class="alert-heading text-primary"><i class="bi bi-graph-up"></i> テクニカル分析モード</h5>
+              <p class="small text-muted mb-3">
+                  直近1年間のチャートデータ（移動平均線、乖離率、支持線・抵抗線）に基づき、現在のトレンドと今後の展望をAIが分析します。<br>
+                  需給分析や、テクニカルに基づいた売買タイミングの検討に最適です。
+              </p>
+              <div class="text-end">
+                <button class="run-analysis-trigger btn btn-gradient-tech rounded-pill px-4" data-mode="tech">
+                  テクニカル分析を実行する 🚀
+                </button>
+              </div>
+            </div>
 
-          </p>
-          <div style="display: flex; justify-content: flex-end;">
-              <button class="run-analysis-trigger" data-mode="total" style="padding: 10px 25px; background: linear-gradient(135.22deg, #0078d7 0%, #0056b3 100%); color: white; border: none; border-radius: 50px; cursor: pointer; font-weight: bold; box-shadow: 0 4px 10px rgba(0,120,215,0.3);">総合分析を実行する 🚀</button>
+            <div id="market-analysis-guide" class="analysis-guide alert alert-light border-start border-4 border-primary shadow-sm" style="display:none;">
+              <h5 class="alert-heading text-primary"><i class="bi bi-globe"></i> 市況分析モード</h5>
+              <p class="small text-muted mb-3">
+                  主要な経済ニュースやキーワードを選択し、それらが株式市場全体や特定のセクターにどのような影響を与えているかを分析します。<br>
+                  マクロ経済の動向や、現在の「相場のテーマ」を把握するのに役立ちます。<br><br>
+                  ※キーワードを選択しすぎると、ニュースが適切に抽出できない場合があります。
+              </p>
+              <div class="text-end">
+                <button class="run-analysis-trigger btn btn-gradient-market rounded-pill px-4" data-mode="market">
+                  市況分析を実行する 🚀
+                </button>
+              </div>
+            </div>
+
+            <div id="total-analysis-guide" class="analysis-guide alert alert-light border-start border-4 border-primary shadow-sm" style="display:none;">
+              <h5 class="alert-heading text-primary"><i class="bi bi-gem"></i> 総合分析モード</h5>
+              <p class="small text-muted mb-3">
+                  下の「分析履歴」から、統合して分析したい複数のレポートを選択して実行してください。<br>
+                  異なる視点の情報をAIが整理・統合し、最終的な投資戦略を提案します。<br><br>
+                  【オススメの使い方】<br>
+                  ❶銘柄詳細を知るために各種分析レポートを選択して総合分析<br>
+                  ❷同業他社の個別株分析レポートを複数選択して総合分析
+              </p>
+              <div class="text-end">
+                <button class="run-analysis-trigger btn btn-gradient-total rounded-pill px-4" data-mode="total">
+                  総合分析を実行する 🚀
+                </button>
+              </div>
+            </div>
+
+            <div id="reresearch-analysis-guide" class="analysis-guide alert alert-light border-start border-4 border-info shadow-sm" style="display:none;">
+              <h5 class="alert-heading text-info"><i class="bi bi-search-heart"></i> 再調査・深掘りモード</h5>
+              <p class="small text-muted mb-3">
+                  既存のレポートに対して、さらなる追加調査を行います。<br>
+                  AIが自律的に不足情報を補完する「AI自律調査」と、あなたの疑問に答える「ユーザー指定調査」の2つの機能があります。<br>
+                  下のフォームから実行したい調査を選択してください。
+              </p>
+            </div>
+
           </div>
+        </div>
       </div>
 
       <!-- 📜 分析履歴セクション -->
-      <div id="history-section" style="margin-top: 40px;">
-          <h3 style="border-bottom: 2px solid #ddd; padding-bottom: 10px;">📜 分析履歴</h3>
-          <div id="history-list">
-              <!-- JSで履歴アイテムが追加される -->
-              <p style="color: #999; font-style: italic;">まだ履歴はありません。</p>
-          </div>
+      <div class="col-12 mt-5">
+        <h4 class="border-bottom pb-2 mb-3 text-secondary"><i class="bi bi-clock-history"></i> 分析履歴</h4>
+        <div id="history-list" class="list-group list-group-flush">
+          <!-- JSで履歴アイテムが追加される -->
+          <p class="text-muted fst-italic p-3">まだ履歴はありません。</p>
+        </div>
       </div>
+
+    </div>
   </div>
 
+  <!-- Footer -->
+  <footer class="text-center text-muted py-4 mt-5 border-top small">
+    &copy; 2026 Nikkei 225 Smart AI Analysis. Powered by Gemini & Flask.
+  </footer>
 
   <!-- 📦 Python(Flask)から全銘柄データをJavaScriptへ受け渡し -->
   <script>
