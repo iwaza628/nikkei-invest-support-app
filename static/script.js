@@ -14,11 +14,13 @@ document.addEventListener("DOMContentLoaded", () => {
   const tabBtns = document.querySelectorAll(".tab-btn");
   const marketFormArea = document.getElementById("market-form-area");
   const reresearchFormArea = document.getElementById("reresearch-form-area"); // 🌟 追加
+  const cancelAnalysisBtn = document.getElementById("cancelAnalysisBtn"); // 🌟 追加
 
   // アプリケーションの状態管理
   let selectedMode = "full"; // デフォルトは個別株分析
   let currentChartData = { ticker: "", candles: [], kairi25: [] };
   let isSyncing = false; // チャート間の同期ループ防止フラグ
+  let currentAbortController = null; // 🌟 追加: ロードキャンセル用
 
   // --- 1. メインチャート(株価・SMA)の初期化 ---
   const chartContainer = document.getElementById("chart");
@@ -104,6 +106,28 @@ document.addEventListener("DOMContentLoaded", () => {
   const kairiSeries = kairiChart.addLineSeries({ 
     color: "purple", lineWidth: 2, title: "", lastValueVisible: false, priceLineVisible: false, crosshairMarkerVisible: false 
   });
+  const volumeSeries = kairiChart.addHistogramSeries({
+    color: '#26a69a',
+    priceFormat: { type: 'volume' },
+    // priceScaleId は指定せず、デフォルト(右側)を共有する
+    visible: false,
+  });
+
+  // サブチャートの切り替えイベント
+  document.querySelectorAll('input[name="subChartToggle"]').forEach(radio => {
+    radio.addEventListener('change', (e) => {
+      const isVol = e.target.id === 'toggleVol';
+      
+      // シリーズの表示・非表示
+      kairiSeries.applyOptions({ visible: !isVol });
+      volumeSeries.applyOptions({ visible: isVol });
+      
+      // スケールを自動調整して、表示されているシリーズに合わせる
+      kairiChart.priceScale('').applyOptions({
+        autoScale: true
+      });
+    });
+  });
 
   // --- 3. マウス移動時の株価詳細表示 (OHLC) ---
   chart.subscribeCrosshairMove(param => {
@@ -127,13 +151,25 @@ document.addEventListener("DOMContentLoaded", () => {
       }
 
       const color = change >= 0 ? "red" : "blue";
+
+      // 業種判定: 全体指数なら小数点2桁、それ以外は整数
+      const currentStock = allStocks.find(s => s.ticker === currentChartData.ticker);
+      const isIndex = currentStock && currentStock.industry === "全体指数";
+      
+      const fmt = (val) => isIndex ? val.toFixed(2) : Math.floor(val).toLocaleString();
+
+      // 出来高の取得
+      const currentCandle = currentChartData.candles.find(c => c.time === time);
+      const volume = currentCandle ? (currentCandle.volume || 0) : 0;
+
       ohlcDisplay.innerHTML = `
         <div style="display: flex; flex-wrap: wrap; gap: 10px;">
           <span><b>日付:</b> ${time}</span>
-          <span><b>始値:</b> ¥${Math.floor(open).toLocaleString()}</span>
-          <span><b>高値:</b> ¥${Math.floor(high).toLocaleString()}</span>
-          <span><b>安値:</b> ¥${Math.floor(low).toLocaleString()}</span>
-          <span><b>終値:</b> ¥${Math.floor(close).toLocaleString()}</span>
+          <span><b>始値:</b> ${fmt(open)}</span>
+          <span><b>高値:</b> ${fmt(high)}</span>
+          <span><b>安値:</b> ${fmt(low)}</span>
+          <span><b>終値:</b> ${fmt(close)}</span>
+          <span><b>出来高:</b> ${volume.toLocaleString()}</span>
         </div>
         <div style="margin-top: 4px;">
           <b>騰落率(前日比):</b> <span style="color:${color}; font-weight:bold;">${change >= 0 ? "+" : ""}${change.toFixed(2)}%</span>
@@ -269,6 +305,24 @@ document.addEventListener("DOMContentLoaded", () => {
       currentChartData = { ticker: this.value, candles: data.candles, kairi25: data.kairi25 };
       isSyncing = true;
       
+      // 業種に応じてチャートの価格スケール精度を変更
+      const isIndex = stockInfo && stockInfo.industry === "全体指数";
+      const precision = isIndex ? 2 : 0;
+      const minMove = isIndex ? 0.01 : 1;
+
+      candleSeries.applyOptions({
+        priceFormat: { type: 'price', precision: precision, minMove: minMove }
+      });
+      sma5Series.applyOptions({
+        priceFormat: { type: 'price', precision: precision, minMove: minMove }
+      });
+      sma25Series.applyOptions({
+        priceFormat: { type: 'price', precision: precision, minMove: minMove }
+      });
+      sma75Series.applyOptions({
+        priceFormat: { type: 'price', precision: precision, minMove: minMove }
+      });
+
       // チャートデータのセット
       candleSeries.setData(data.candles);
       const closeData = data.candles.map(d => ({ time: d.time, value: d.close }));
@@ -277,6 +331,14 @@ document.addEventListener("DOMContentLoaded", () => {
       sma25Series.setData(data.sma25); 
       sma75Series.setData(data.sma75);
       kairiSeries.setData(data.kairi25);
+      
+      // 出来高データのセット (サブチャート用)
+      const volData = data.candles.map(c => ({
+        time: c.time,
+        value: c.volume,
+        color: c.close >= c.open ? 'rgba(38, 166, 154, 0.5)' : 'rgba(255, 82, 82, 0.5)',
+      }));
+      volumeSeries.setData(volData);
 
       // 表示範囲の調整（直近120日分をデフォルト表示）
       const totalPoints = data.candles.length;
@@ -286,14 +348,16 @@ document.addEventListener("DOMContentLoaded", () => {
       isSyncing = false;
       
       // 統計情報の表示更新
+      const fmtPrice = (val) => isIndex ? val.toFixed(2) : Math.floor(val).toLocaleString();
+
       document.getElementById("stockStats").style.display = "flex";
       document.getElementById("statCap").textContent = data.stats.market_cap;
       document.getElementById("statPER").textContent = data.stats.per;
       document.getElementById("statPBR").textContent = data.stats.pbr;
       document.getElementById("statROE").textContent = data.stats.roe;
       document.getElementById("statROA").textContent = data.stats.roa;
-      document.getElementById("statMax").textContent = `¥${data.stats.max_price.toLocaleString()} (${data.stats.max_date})`;
-      document.getElementById("statMin").textContent = `¥${data.stats.min_price.toLocaleString()} (${data.stats.min_date})`;
+      document.getElementById("statMax").textContent = `${fmtPrice(data.stats.max_price)} (${data.stats.max_date})`;
+      document.getElementById("statMin").textContent = `${fmtPrice(data.stats.min_price)} (${data.stats.min_date})`;
       // 出来高データは隠しリストに保持（分析機能用）
       document.getElementById("statVolRanking").innerHTML = data.stats.volume_ranking.map((v, i) => `<li>${i+1}. ${v.date}: <b>${v.volume.toLocaleString()}</b></li>`).join("");
       document.getElementById("statDiv").textContent = data.stats.dividend_yield;
@@ -336,6 +400,12 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // 統合された分析実行処理
   async function runAnalysis(e) {
+      // 既存の処理があればキャンセルする
+      if (currentAbortController) {
+          currentAbortController.abort();
+      }
+      currentAbortController = new AbortController(); // 新しいコントローラーを作成
+
       // クリックされたボタンからサブモードを取得 (再調査のauto/manual判定用)
       const btn = e.currentTarget;
       const subMode = btn.dataset.mode; // reresearch_auto or reresearch_manual
@@ -351,6 +421,8 @@ document.addEventListener("DOMContentLoaded", () => {
       document.getElementById("analysis-container").style.display = "none";
 
       let endpoint, bodyData, msg, title;
+      // 高速モード使用フラグ (ローディング表示用)
+      let isFastMode = false;
 
       if (selectedMode === "total" || selectedMode === "reresearch") {
           // チェックされた履歴アイテムを取得
@@ -383,10 +455,14 @@ document.addEventListener("DOMContentLoaded", () => {
                       alert("質問内容を入力してください。");
                       return;
                   }
+                  isFastMode = document.getElementById("re_manual_fast").checked;
                   bodyData = { 
                       selected_results: selectedResults,
                       user_question: userQ,
-                      mode: "manual"
+                      mode: "manual",
+                      beginner_mode: document.getElementById("re_manual_beginner").checked,
+                      deep_analysis: document.getElementById("re_manual_deep").checked,
+                      use_lite_model: isFastMode
                   };
                   msg = "あなたの質問について調査中...";
                   title = "## 再調査レポート (Q&A)\n\n";
@@ -394,7 +470,11 @@ document.addEventListener("DOMContentLoaded", () => {
                   // reresearch_auto
                   bodyData = { 
                       selected_results: selectedResults,
-                      mode: "auto"
+                      mode: "auto",
+                      beginner_mode: document.getElementById("re_auto_beginner").checked,
+                      deep_analysis: document.getElementById("re_auto_deep").checked,
+                      short_term: document.getElementById("re_auto_short").checked,
+                      mid_term: document.getElementById("re_auto_mid").checked
                   };
                   msg = "AIが深掘り調査中...";
                   title = "## 再調査レポート (深掘り調査)\n\n";
@@ -423,7 +503,7 @@ document.addEventListener("DOMContentLoaded", () => {
               mid_term: document.getElementById("m_mid").checked,
               sector_view: document.getElementById("m_sector").checked
           };
-          msg = "最新ニュースを取得して市況を分析中...(20秒程かかります)";
+          msg = "最新ニュースを取得して市況を分析中...";
           title = "## 市況分析レポート\n\n";
       } else {
           // 出来高ランキングデータの抽出
@@ -440,18 +520,30 @@ document.addEventListener("DOMContentLoaded", () => {
           if (selectedMode === "volume") {
               endpoint = "/analyze_volume";
               bodyData = { ...currentChartData, volume_ranking: volumeRanking };
-              msg = "出来高急増日の背景を調査中...(20秒程かかります)";
+              msg = "出来高急増日の背景を調査中...";
               title = "## 出来高分析レポート\n\n";
           } else if (selectedMode === "tech") {
               endpoint = "/analyze";
+              isFastMode = document.getElementById("tech_fast").checked;
               // テクニカル分析には全データを送信（バックエンドで1年分として処理）
-              bodyData = currentChartData;
-              msg = "チャート形状を分析中...(20秒程かかります)";
+              bodyData = {
+                  ...currentChartData,
+                  beginner_mode: document.getElementById("tech_beginner").checked,
+                  deep_analysis: document.getElementById("tech_deep").checked,
+                  use_lite_model: isFastMode
+              };
+              msg = "チャート形状を分析中...";
               title = "## テクニカル分析レポート\n\n";
           } else {
               endpoint = "/analyze_full";
-              bodyData = currentChartData;
-              msg = "Google検索で最新情報を調査中...(20秒程かかります)";
+              isFastMode = document.getElementById("full_fast").checked;
+              bodyData = {
+                  ...currentChartData,
+                  beginner_mode: document.getElementById("full_beginner").checked,
+                  deep_analysis: document.getElementById("full_deep").checked,
+                  use_lite_model: isFastMode
+              };
+              msg = "Google検索で最新情報を調査中...";
               title = "## 個別株分析レポート\n\n";
           }
       }
@@ -459,7 +551,9 @@ document.addEventListener("DOMContentLoaded", () => {
       // UI状態の更新
       runAnalysisTriggers.forEach(b => b.disabled = true);
       document.getElementById("loading-container").style.display = "block";
-      loadingIndicator.textContent = msg;
+      cancelAnalysisBtn.style.display = "inline-block"; // キャンセルボタンを表示
+      loadingIndicator.textContent = msg + (isFastMode ? " (高速モード)" : "");
+      
       // 分析開始時に結果コンテナを表示
       document.getElementById("analysis-container").style.display = "block";
       analysisResult.style.opacity = "0.5";
@@ -468,7 +562,8 @@ document.addEventListener("DOMContentLoaded", () => {
           const res = await fetch(endpoint, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify(bodyData)
+              body: JSON.stringify(bodyData),
+              signal: currentAbortController.signal // AbortSignalを渡す
           });
           const data = await res.json();
           
@@ -505,13 +600,30 @@ document.addEventListener("DOMContentLoaded", () => {
           }
           
       } catch (error) {
-          console.error(error);
-          analysisResult.innerHTML = "エラーが発生しました。サーバーとの通信に失敗しました。";
+          if (error.name === 'AbortError') {
+              console.log('Fetch aborted');
+              analysisResult.innerHTML = `<span style="color:orange;">分析がキャンセルされました。</span>`;
+          } else {
+              console.error(error);
+              analysisResult.innerHTML = "エラーが発生しました。サーバーとの通信に失敗しました。";
+          }
       } finally {
           runAnalysisTriggers.forEach(b => b.disabled = false);
           document.getElementById("loading-container").style.display = "none";
+          cancelAnalysisBtn.style.display = "none"; // ボタンを隠す
           analysisResult.style.opacity = "1.0";
+          currentAbortController = null;
       }
+  }
+
+  // キャンセルボタンのイベントリスナー
+  if (cancelAnalysisBtn) {
+      cancelAnalysisBtn.addEventListener("click", () => {
+          if (currentAbortController) {
+              currentAbortController.abort();
+              loadingIndicator.textContent = "キャンセル中...";
+          }
+      });
   }
 
   // --- 8. AI会社説明の取得 ---
@@ -682,5 +794,16 @@ document.addEventListener("DOMContentLoaded", () => {
               container.scrollIntoView({ behavior: 'smooth', block: 'start' });
           }
       });
+  }
+
+  // --- 13. チャートリセットボタン ---
+  const resetChartBtn = document.getElementById("resetChartBtn");
+  if (resetChartBtn) {
+    resetChartBtn.addEventListener("click", () => {
+      chart.timeScale().fitContent();
+      // 乖離率チャートも同期させるため、少し遅らせて同期処理を走らせるか、
+      // 単純に両方をfitContentする
+      kairiChart.timeScale().fitContent();
+    });
   }
 });

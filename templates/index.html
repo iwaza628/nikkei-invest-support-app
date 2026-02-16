@@ -87,7 +87,21 @@
           <div class="col-md-8 col-lg-9">
             <div class="card shadow-sm mb-3">
               <div class="card-header bg-white d-flex justify-content-between align-items-center py-2">
-                <div><i class="bi bi-activity me-1"></i> チャート</div>
+                <div class="d-flex align-items-center gap-2">
+                  <div class="d-flex align-items-center me-2">
+                    <i class="bi bi-activity me-1"></i> チャート
+                    <button id="resetChartBtn" class="btn btn-sm btn-outline-secondary ms-2 py-0 px-2" title="チャートのスケールをリセット" style="font-size: 0.8rem;">
+                      🔄️
+                    </button>
+                  </div>
+                  <!-- サブチャート表示切り替え -->
+                  <div class="btn-group btn-group-sm" role="group" aria-label="サブチャート切り替え">
+                    <input type="radio" class="btn-check" name="subChartToggle" id="toggleKairi" autocomplete="off" checked>
+                    <label class="btn btn-outline-primary py-0" for="toggleKairi" style="font-size: 0.75rem;">乖離率</label>
+                    <input type="radio" class="btn-check" name="subChartToggle" id="toggleVol" autocomplete="off">
+                    <label class="btn btn-outline-primary py-0" for="toggleVol" style="font-size: 0.75rem;">出来高</label>
+                  </div>
+                </div>
                 <!-- マウスカーソル位置の株価詳細（OHLC） -->
                 <div id="ohlc-display" class="small font-monospace text-muted">
                   日付: -- 始値: -- 高値: -- 安値: -- 終値: --
@@ -170,6 +184,10 @@
               <div class="loading-content">
                 <div class="spinner-border text-primary" role="status" id="loading-spinner"></div>
                 <div id="loading-indicator" class="fw-bold text-primary"></div>
+                <!-- キャンセルボタン -->
+                <button id="cancelAnalysisBtn" class="btn btn-outline-secondary btn-sm mt-3 px-4 rounded-pill">
+                  <i class="bi bi-x-circle"></i> 分析をキャンセル
+                </button>
               </div>
             </div>
 
@@ -207,6 +225,16 @@
                             下の「分析履歴」から対象のレポートを選択(チェック)してください。<br>
                             AIが自ら問いを立てて深掘りします。
                         </p>
+                        <!-- オプション設定 -->
+                        <div class="mt-3 pt-2 border-top">
+                            <label class="form-label small fw-bold text-secondary">⚙️ オプション設定</label>
+                            <div class="d-flex flex-wrap gap-2 small">
+                                <label class="form-check-label"><input type="checkbox" class="form-check-input" id="re_auto_beginner"> 初心者向け</label>
+                                <label class="form-check-label"><input type="checkbox" class="form-check-input" id="re_auto_deep"> 詳細分析</label>
+                                <label class="form-check-label"><input type="checkbox" class="form-check-input" id="re_auto_short"> 短期分析</label>
+                                <label class="form-check-label"><input type="checkbox" class="form-check-input" id="re_auto_mid"> 中期分析</label>
+                            </div>
+                        </div>
                         <div class="text-center mt-4">
                             <button class="run-analysis-trigger btn btn-gradient-reresearch rounded-pill px-4" data-mode="reresearch_auto">
                                 AI深掘り調査を実行 🚀
@@ -228,7 +256,16 @@
                             疑問点を入力してください。
                         </p>
                         <textarea id="user_question" class="form-control mb-3" rows="3" placeholder="例: この銘柄の競合他社は何？優位性は？"></textarea>
-                        <div class="text-center">
+                        <!-- オプション設定 -->
+                        <div class="mt-3 pt-2 border-top">
+                            <label class="form-label small fw-bold text-secondary">⚙️ オプション設定</label>
+                            <div class="d-flex flex-wrap gap-2 small">
+                                <label class="form-check-label"><input type="checkbox" class="form-check-input" id="re_manual_beginner"> 初心者向け</label>
+                                <label class="form-check-label"><input type="checkbox" class="form-check-input" id="re_manual_deep"> 詳細分析</label>
+                                <label class="form-check-label"><input type="checkbox" class="form-check-input" id="re_manual_fast"> ⚡高速モード</label>
+                            </div>
+                        </div>
+                        <div class="text-center mt-4">
                             <button class="run-analysis-trigger btn btn-gradient-reresearch rounded-pill px-4" data-mode="reresearch_manual">
                                 ユーザー指定調査を実行 🚀
                             </button>
@@ -414,10 +451,15 @@
                   最新の決算情報、株価動向、需給状況（信用倍率）、アナリスト評価などをGoogle検索を用いて多角的に調査・分析します。<br>
                   企業のファンダメンタルズに基づいた中長期的な分析に最適です。
               </p>
-              <div class="text-end">
-                <button class="run-analysis-trigger btn btn-gradient-full rounded-pill px-4" data-mode="full">
-                  個別株分析を実行する 🚀
-                </button>
+              <div class="mt-2 pt-2 border-top d-flex justify-content-between align-items-center">
+                  <div class="d-flex flex-wrap gap-3 small">
+                      <label class="form-check-label text-muted fw-bold"><input type="checkbox" class="form-check-input" id="full_beginner"> 初心者向け説明</label>
+                      <label class="form-check-label text-muted fw-bold"><input type="checkbox" class="form-check-input" id="full_deep"> 詳細分析</label>
+                      <label class="form-check-label text-muted fw-bold"><input type="checkbox" class="form-check-input" id="full_fast"> ⚡高速モード</label>
+                  </div>
+                  <button class="run-analysis-trigger btn btn-gradient-full rounded-pill px-4" data-mode="full">
+                    個別株分析を実行する 🚀
+                  </button>
               </div>
             </div>
 
@@ -440,10 +482,15 @@
                   直近1年間のチャートデータ（移動平均線、乖離率、支持線・抵抗線）に基づき、現在のトレンドと今後の展望をAIが分析します。<br>
                   需給分析や、テクニカルに基づいた売買タイミングの検討に最適です。
               </p>
-              <div class="text-end">
-                <button class="run-analysis-trigger btn btn-gradient-tech rounded-pill px-4" data-mode="tech">
-                  テクニカル分析を実行する 🚀
-                </button>
+              <div class="mt-2 pt-2 border-top d-flex justify-content-between align-items-center">
+                  <div class="d-flex flex-wrap gap-3 small">
+                      <label class="form-check-label text-muted fw-bold"><input type="checkbox" class="form-check-input" id="tech_beginner"> 初心者向け説明</label>
+                      <label class="form-check-label text-muted fw-bold"><input type="checkbox" class="form-check-input" id="tech_deep"> 詳細分析</label>
+                      <label class="form-check-label text-muted fw-bold"><input type="checkbox" class="form-check-input" id="tech_fast"> ⚡高速モード</label>
+                  </div>
+                  <button class="run-analysis-trigger btn btn-gradient-tech rounded-pill px-4" data-mode="tech">
+                    テクニカル分析を実行する 🚀
+                  </button>
               </div>
             </div>
 

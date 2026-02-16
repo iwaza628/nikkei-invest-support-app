@@ -48,8 +48,8 @@ def load_stock_data():
     
     # 指定された業種の順番
     industry_order = [
-        "全体指数", "製造業(完成品)", "製造業(素材)", "商業・サービス", 
-        "金融・情報通信", "化学・医薬品", "不動産・建設", "運輸・物流", "食品"
+        "全体指数", "製造業(完成品)", "製造業(素材)", "科学系・エネルギー", 
+        "商業・サービス", "情報・通信", "不動産・建設", "金融系", "物流系", "食品系"
     ]
     
     # CSVに存在する業種を取得
@@ -58,11 +58,11 @@ def load_stock_data():
     # 指定順序に基づいてソート（指定リストにないものは最後に追加）
     industries = sorted(existing_industries, key=lambda x: industry_order.index(x) if x in industry_order else 999)
     
-    stocks = df.to_dict(orient='records')                 # 全銘柄リスト
+    stocks = df.to_dict(orient='records') # 全銘柄リスト
     return industries, stocks
 
 # --- Google News RSS 取得関数 ---
-def fetch_rss_news(topics, limit=150):
+def fetch_rss_news(topics, limit=200):
     if not topics:
         return None, "トピックが選択されていません。", None
 
@@ -236,7 +236,7 @@ def get_data():
             return [{"time": idx.strftime("%Y-%m-%d"), "value": float(v)} for idx, v in series.items() if pd.notna(v)]
 
         return jsonify({
-            "candles": [{"time": idx.strftime("%Y-%m-%d"), "open": float(r["Open"]), "high": float(r["High"]), "low": float(r["Low"]), "close": float(r["Close"])} for idx, r in df.iterrows()],
+            "candles": [{"time": idx.strftime("%Y-%m-%d"), "open": float(r["Open"]), "high": float(r["High"]), "low": float(r["Low"]), "close": float(r["Close"]), "volume": float(r["Volume"])} for idx, r in df.iterrows()],
             "sma5": to_list(df['sma5']),
             "sma25": to_list(df['sma25']),
             "sma75": to_list(df['sma75']),
@@ -257,10 +257,22 @@ def get_data():
 def analyze():
     req = request.get_json()
     ticker = req.get("ticker", "不明")
+    use_lite = req.get("use_lite_model", False)
+    
+    # オプション設定
+    beginner_mode = req.get("beginner_mode", False)
+    deep_analysis = req.get("deep_analysis", False)
+    
     recent_candles = [{"t": c["time"], "c": c["close"]} for c in req.get("candles", [])] 
     recent_kairi = [{"t": k["time"], "v": round(k["value"], 2)} for k in req.get("kairi25", [])]
 
     if not client: return jsonify({"error": "AI Client not initialized"}), 500
+
+    extra_instructions = ""
+    if beginner_mode:
+        extra_instructions += "\n- 初学者向け説明：説明の際に使用する専門用語に「※」で注釈を追加して投資初学者でも分かりやすい説明をすること。"
+    if deep_analysis:
+        extra_instructions += "\n- 詳細分析：騙しやノイズの可能性についても考慮し、複数のシナリオ（強気・弱気）を提示すること。"
 
     prompt = f"""
     # 役割
@@ -284,14 +296,23 @@ def analyze():
     3. ライン分析：明確な支持線・抵抗線が見える日付範囲と価格帯を分析。
     4. 乖離率考察：現在の25日乖離率と、過去の乖離率の推移を比較することで、売られすぎ・買われすぎの目安となる値を極値を基に考察。異常値と思われる値は異常値である旨を記載すること。
     5. 結論：1～4の内容を基に、今後の展望と、戦略アドバイスを出力。
+
+    ## 追加の指示内容
+    {extra_instructions}
     """
     try:
+        # モデルと設定の切り替え
+        target_model = MODEL_LITE if use_lite else MODEL_NAME
+        
+        gen_config_params = {}
+        if not use_lite:
+            # Liteモデル以外(High Thinking)の場合のみThinking設定を入れる
+            gen_config_params["thinking_config"] = types.ThinkingConfig(include_thoughts=True, thinking_level="low")
+
         response = client.models.generate_content(
-            model=MODEL_NAME,
+            model=target_model,
             contents=prompt,
-            config=types.GenerateContentConfig(
-                thinking_config=types.ThinkingConfig(include_thoughts=True, thinking_level="low"),
-            )
+            config=types.GenerateContentConfig(**gen_config_params)
         )
         return jsonify({"analysis": response.text})
     except Exception as e:
@@ -302,8 +323,19 @@ def analyze():
 def analyze_full():
     req = request.get_json()
     ticker = req.get("ticker", "不明")
+    use_lite = req.get("use_lite_model", False)
     
+    # オプション設定
+    beginner_mode = req.get("beginner_mode", False)
+    deep_analysis = req.get("deep_analysis", False)
+
     if not client: return jsonify({"error": "AI Client not initialized"}), 500
+
+    extra_instructions = ""
+    if beginner_mode:
+        extra_instructions += "\n- 初学者向け説明：説明の際に使用する専門用語に「※」で注釈を追加して投資初学者でも分かりやすい説明をすること。"
+    if deep_analysis:
+        extra_instructions += "\n- 詳細分析：競合他社との比較や、業界全体の動向についても言及し、より多角的な視点で分析すること。"
 
     prompt = f"""
     # 役割
@@ -325,17 +357,26 @@ def analyze_full():
     3. 需給分析：現在の信用倍率と推移から、個人・機関の売買動向を分析。
     4. 評価抽出：目標株価・コンセンサス情報を抽出。
     5. 結論：今後の注目イベントとリスク要因を整理。
+
+    ## 追加の指示内容
+    {extra_instructions}
     """
     
     try:
+        # モデルと設定の切り替え
+        target_model = MODEL_LITE if use_lite else MODEL_NAME
+        
+        gen_config_params = {
+            "tools": [types.Tool(google_search=types.GoogleSearch())]
+        }
+        if not use_lite:
+            gen_config_params["thinking_config"] = types.ThinkingConfig(include_thoughts=True, thinking_level="low")
+
         # Google検索(Grounding)機能を有効化して回答を生成
         response = client.models.generate_content(
-            model=MODEL_NAME,
+            model=target_model,
             contents=prompt,
-            config=types.GenerateContentConfig(
-                tools=[types.Tool(google_search=types.GoogleSearch())],
-                thinking_config=types.ThinkingConfig(include_thoughts=True, thinking_level="low"),
-            )
+            config=types.GenerateContentConfig(**gen_config_params)
         )
         return jsonify({"analysis": response.text})
         
@@ -349,6 +390,7 @@ def analyze_volume():
     req = request.get_json()
     ticker = req.get("ticker", "不明")
     volume_ranking = req.get("volume_ranking", [])
+    use_lite = req.get("use_lite_model", False)
 
     if not client: return jsonify({"error": "AI Client not initialized"}), 500
 
@@ -400,13 +442,19 @@ def analyze_volume():
     """
     
     try:
+        # モデルと設定の切り替え
+        target_model = MODEL_LITE if use_lite else MODEL_NAME
+        
+        gen_config_params = {
+            "tools": [types.Tool(google_search=types.GoogleSearch())]
+        }
+        if not use_lite:
+            gen_config_params["thinking_config"] = types.ThinkingConfig(include_thoughts=True, thinking_level="low")
+
         response = client.models.generate_content(
-            model=MODEL_NAME,
+            model=target_model,
             contents=prompt,
-            config=types.GenerateContentConfig(
-                tools=[types.Tool(google_search=types.GoogleSearch())],
-                thinking_config=types.ThinkingConfig(include_thoughts=True, thinking_level="low"),
-            )
+            config=types.GenerateContentConfig(**gen_config_params)
         )
         return jsonify({"analysis": response.text})
         
@@ -428,6 +476,9 @@ def analyze_market():
     short_term = req.get("short_term", False)
     mid_term = req.get("mid_term", False)
     sector_view = req.get("sector_view", False)
+    
+    # モデル設定
+    use_lite = req.get("use_lite_model", False)
 
     if not client: return jsonify({"error": "AI Client not initialized"}), 500
 
@@ -485,12 +536,18 @@ def analyze_market():
     """
 
     try:
+        # モデルと設定の切り替え
+        target_model = MODEL_LITE if use_lite else MODEL_NAME
+        
+        gen_config_params = {}
+        if not use_lite:
+            # Market分析はHigh Thinking
+            gen_config_params["thinking_config"] = types.ThinkingConfig(include_thoughts=True, thinking_level="high")
+
         response = client.models.generate_content(
-            model=MODEL_NAME,
+            model=target_model,
             contents=prompt,
-            config=types.GenerateContentConfig(
-                thinking_config=types.ThinkingConfig(include_thoughts=True, thinking_level="high"),
-            )
+            config=types.GenerateContentConfig(**gen_config_params)
         )
         return jsonify({
             "analysis": response.text,
@@ -504,6 +561,7 @@ def analyze_market():
 def analyze_total():
     req = request.get_json()
     selected_results = req.get("selected_results", [])
+    use_lite = req.get("use_lite_model", False)
     
     if not selected_results:
         return jsonify({"error": "分析対象の結果が選択されていません。"}), 400
@@ -541,12 +599,18 @@ def analyze_total():
     """
 
     try:
+        # モデルと設定の切り替え
+        target_model = MODEL_LITE if use_lite else MODEL_NAME
+        
+        gen_config_params = {}
+        if not use_lite:
+            # Total分析はHigh Thinking
+            gen_config_params["thinking_config"] = types.ThinkingConfig(include_thoughts=True, thinking_level="high")
+
         response = client.models.generate_content(
-            model=MODEL_NAME,
+            model=target_model,
             contents=prompt,
-            config=types.GenerateContentConfig(
-                thinking_config=types.ThinkingConfig(include_thoughts=True, thinking_level="high"),
-            )
+            config=types.GenerateContentConfig(**gen_config_params)
         )
         return jsonify({"analysis": response.text})
     except Exception as e:
@@ -616,7 +680,14 @@ def re_research():
     selected_results = req.get("selected_results", [])
     user_question = req.get("user_question", "")
     mode = req.get("mode", "auto") # "auto" or "manual"
+    use_lite = req.get("use_lite_model", False)
     
+    # オプション設定
+    beginner_mode = req.get("beginner_mode", False)
+    deep_analysis = req.get("deep_analysis", False)
+    short_term = req.get("short_term", False)
+    mid_term = req.get("mid_term", False)
+
     if not selected_results:
         return jsonify({"error": "分析対象のレポートが選択されていません。"}), 400
 
@@ -629,6 +700,16 @@ def re_research():
         combined_texts.append(text)
     
     context_text = "\n\n---\n\n".join(combined_texts)
+
+    extra_instructions = ""
+    if beginner_mode:
+        extra_instructions += "\n- 初学者向け説明：説明の際に使用する専門用語に「※」で注釈を追加して投資初学者でも分かりやすい説明をすること。"
+    if deep_analysis:
+        extra_instructions += "\n- 詳細分析：表面的な事実だけでなく、背景にある要因や将来的なリスクについても深く分析すること。"
+    if short_term:
+        extra_instructions += "\n- 短期分析：直近1週間の短期的な目線の分析をすること。特に、直近のイベントや需給の変化に着目すること。"
+    if mid_term:
+        extra_instructions += "\n- 中期分析：直近1ヶ月の中期的な目線の分析をすること。特に、トレンドの転換点や経済指標の影響に着目すること。"
 
     prompt = ""
     if mode == "auto":
@@ -653,6 +734,9 @@ def re_research():
         2. 深掘り調査: 元のレポートで触れられているトピックについて、「なぜ？」「その背景は？」「競合はどうなのか？」といった疑問を自ら立て、追加調査。
         3. リスク再評価: 新たな情報を踏まえた上で、投資判断における隠れたリスクを分析。
         4. 結論: 再調査によって新たに得られた情報を整理。
+
+        ## 追加の指示内容
+        {extra_instructions}
         """
     else:
         if not user_question:
@@ -660,17 +744,17 @@ def re_research():
         
         prompt = f"""
         # 役割
-        あなたはユーザーの疑問に答える頼れる金融アドバイザーです。
+        あなたは金融アドバイザーとしてユーザの質問に答える人です。
 
         # 目的
-        以下のレポートの内容を踏まえた上で、Google Searchを用いて
-        ユーザーの質問に回答する。
+        以下のレポートの内容と、ユーザの質問を踏まえた上で、Google Searchを用いて
+        ユーザの質問に回答する。
 
         # レポート
         {context_text}
 
         # ユーザーの質問
-        「{user_question}」
+        {user_question}
 
         # 出力ルール
         - 回答はMarkdown形式で出力すること。
@@ -680,6 +764,9 @@ def re_research():
         # 指示内容
         1. 質問への回答: ユーザーの質問に対して、最新情報に基づいた具体的かつ明確な回答を提供。
         2. 関連情報の補足: 質問に関連する重要な周辺情報や、投資判断において考慮すべき点があれば追加で言及。
+
+        ## 追加の指示内容
+        {extra_instructions}
         """
 
     try:
@@ -690,13 +777,20 @@ def re_research():
 
         for attempt in range(max_retries):
             try:
+                # モデルと設定の切り替え
+                target_model = MODEL_LITE if use_lite else MODEL_NAME
+                
+                gen_config_params = {
+                    "tools": [types.Tool(google_search=types.GoogleSearch())]
+                }
+                if not use_lite:
+                    # Re-ResearchはHigh Thinking
+                    gen_config_params["thinking_config"] = types.ThinkingConfig(include_thoughts=True, thinking_level="high")
+
                 response = client.models.generate_content(
-                    model=MODEL_NAME,
+                    model=target_model,
                     contents=prompt,
-                    config=types.GenerateContentConfig(
-                        tools=[types.Tool(google_search=types.GoogleSearch())],
-                        thinking_config=types.ThinkingConfig(include_thoughts=True, thinking_level="high"),
-                    )
+                    config=types.GenerateContentConfig(**gen_config_params)
                 )
                 return jsonify({"analysis": response.text})
             except Exception as inner_e:
