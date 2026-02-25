@@ -1,4 +1,4 @@
-# 各分析コードを統合した完全版(テクニカル分析＋個別株分析)
+# 各分析コードを統合した完全版
 import os
 import sqlite3
 import pandas as pd
@@ -140,7 +140,7 @@ def get_data():
         # 欠損値（空データ）を削除
         df = df.dropna(subset=['Open', 'High', 'Low', 'Close'])
 
-        # --- 📊 統計データの計算 ---
+        # --- 統計データの計算 ---
         max_price = float(df['High'].max())
         max_date = df['High'].idxmax().strftime("%Y-%m-%d")
         min_price = float(df['Low'].min())
@@ -274,6 +274,7 @@ def analyze():
     if deep_analysis:
         extra_instructions += "\n- 詳細分析：騙しやノイズの可能性についても考慮し、複数のシナリオ（強気・弱気）を提示すること。"
 
+    # プロンプト文
     prompt = f"""
     # 役割
     あなたは金融市場を分析するプロの投資アナリストです。
@@ -337,6 +338,7 @@ def analyze_full():
     if deep_analysis:
         extra_instructions += "\n- 詳細分析：競合他社との比較や、業界全体の動向についても言及し、より多角的な視点で分析すること。"
 
+    # プロンプト文
     prompt = f"""
     # 役割
     あなたは金融市場を分析するプロの投資アナリストです。
@@ -394,7 +396,7 @@ def analyze_volume():
 
     if not client: return jsonify({"error": "AI Client not initialized"}), 500
 
-    # 日付が近い(前後1日以内)出来高急増日をグループ化
+    # 日付が近い(前後1週間以内)出来高急増日をグループ化
     grouped_dates = []
     if volume_ranking:
         sorted_ranking = sorted(volume_ranking, key=lambda x: x['date'])
@@ -403,7 +405,7 @@ def analyze_volume():
             for i in range(1, len(sorted_ranking)):
                 prev_date = datetime.strptime(sorted_ranking[i-1]['date'], '%Y-%m-%d')
                 curr_date = datetime.strptime(sorted_ranking[i]['date'], '%Y-%m-%d')
-                if (curr_date - prev_date).days <= 2: # 中1日(2日差)までをグループ化
+                if (curr_date - prev_date).days <= 7: # 前後1週間(7日差)までをグループ化
                     current_group.append(sorted_ranking[i]['date'])
                 else:
                     grouped_dates.append(current_group)
@@ -415,6 +417,7 @@ def analyze_volume():
 
     date_groups_str = "\n".join([f"- {', '.join(group)}" for group in grouped_dates])
 
+    # プロンプト文
     prompt = f"""
     # 役割
     あなたは金融市場を分析するプロの投資アナリストです。
@@ -509,6 +512,7 @@ def analyze_market():
     if sector_view:
         extra_instructions += "\n- 業種別分析：ニュース上で話題になっている各業種の状況について分析すること。"
 
+    # プロンプト文
     prompt = f"""
     # 役割
     あなたは金融市場を分析するプロの投資アナリストです。
@@ -576,6 +580,7 @@ def analyze_total():
     
     context_text = "\n\n---\n\n".join(combined_texts)
 
+    # プロンプト文
     prompt = f"""
     # 役割
     あなたは金融市場のレポートを分析するプロの投資戦略家です。
@@ -637,6 +642,7 @@ def get_company_info():
     except Exception as e:
         print(f"Price fetch error in company info: {e}")
 
+    # プロンプト文
     prompt = f"""
     # 役割
     あなたは特定の企業の情報を調査することを得意とする企業アナリストです。
@@ -711,6 +717,7 @@ def re_research():
     if mid_term:
         extra_instructions += "\n- 中期分析：直近1ヶ月の中期的な目線の分析をすること。特に、トレンドの転換点や経済指標の影響に着目すること。"
 
+    # プロンプト文(auto)
     prompt = ""
     if mode == "auto":
         prompt = f"""
@@ -738,6 +745,7 @@ def re_research():
         ## 追加の指示内容
         {extra_instructions}
         """
+    # プロンプト文(question)
     else:
         if not user_question:
              return jsonify({"error": "質問内容が入力されていません。"}), 400
@@ -773,7 +781,7 @@ def re_research():
         # Google検索(Grounding)機能を有効化して回答を生成
         # 再試行ロジック (リトライ) を実装
         max_retries = 3
-        retry_delay = 2 # 秒
+        retry_delay = 2 
 
         for attempt in range(max_retries):
             try:
@@ -784,8 +792,7 @@ def re_research():
                     "tools": [types.Tool(google_search=types.GoogleSearch())]
                 }
                 if not use_lite:
-                    # Re-ResearchはHigh Thinking
-                    gen_config_params["thinking_config"] = types.ThinkingConfig(include_thoughts=True, thinking_level="high")
+                    gen_config_params["thinking_config"] = types.ThinkingConfig(include_thoughts=True, thinking_level="low")
 
                 response = client.models.generate_content(
                     model=target_model,
@@ -798,7 +805,7 @@ def re_research():
                 # 503エラー (Overloaded) の場合のみリトライ
                 if "503" in error_str or "UNAVAILABLE" in error_str or "429" in error_str:
                     if attempt < max_retries - 1:
-                        time.sleep(retry_delay * (attempt + 1)) # エクスポネンシャルバックオフ気味に待機
+                        time.sleep(retry_delay * (attempt + 1))
                         continue
                 raise inner_e # その他のエラー、またはリトライ回数超過時は例外を投げる
         
@@ -819,7 +826,7 @@ def export_pdf():
         content_html = markdown.markdown(content_md, extensions=['tables', 'fenced_code'])
 
         # PDF用のHTMLテンプレート
-        # CSSを大幅に強化してPDFのレイアウトを整える
+        # CSSでPDFのレイアウトを整える
         full_html = f"""
         <html>
         <head>

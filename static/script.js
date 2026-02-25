@@ -2,25 +2,24 @@ document.addEventListener("DOMContentLoaded", () => {
   // DOM要素の取得
   const industrySelect = document.getElementById("industrySelect");
   const stockSelect = document.getElementById("stockSelect");
-  const stockSearch = document.getElementById("stockSearch"); // 🌟 追加
+  const stockSearch = document.getElementById("stockSearch");
   const recentList = document.getElementById("recentList");
   const analysisResult = document.getElementById("analysisResult");
   const loadingSpinner = document.getElementById("loading-spinner");
   const loadingIndicator = document.getElementById("loading-indicator");
   const ohlcDisplay = document.getElementById("ohlc-display");
-  // --- 🌟 追加：新UI要素 ---
   const runAnalysisTriggers = document.querySelectorAll(".run-analysis-trigger");
   const exportPdfBtn = document.getElementById("exportPdfBtn");
   const tabBtns = document.querySelectorAll(".tab-btn");
   const marketFormArea = document.getElementById("market-form-area");
-  const reresearchFormArea = document.getElementById("reresearch-form-area"); // 🌟 追加
-  const cancelAnalysisBtn = document.getElementById("cancelAnalysisBtn"); // 🌟 追加
+  const reresearchFormArea = document.getElementById("reresearch-form-area"); 
+  const cancelAnalysisBtn = document.getElementById("cancelAnalysisBtn"); 
 
   // アプリケーションの状態管理
   let selectedMode = "full"; // デフォルトは個別株分析
   let currentChartData = { ticker: "", candles: [], kairi25: [] };
   let isSyncing = false; // チャート間の同期ループ防止フラグ
-  let currentAbortController = null; // 🌟 追加: ロードキャンセル用
+  let currentAbortController = null; // ロードキャンセル用
 
   // --- 1. メインチャート(株価・SMA)の初期化 ---
   const chartContainer = document.getElementById("chart");
@@ -236,7 +235,7 @@ document.addEventListener("DOMContentLoaded", () => {
   industrySelect.addEventListener("change", updateStockList);
   updateStockList(); renderRecent();
 
-  // --- 🌟 銘柄検索機能 (オートコンプリート) ---
+  // --- 銘柄検索機能 (オートコンプリート) ---
   const searchResults = document.getElementById("searchResults");
   if (stockSearch && searchResults) {
       stockSearch.addEventListener("input", (e) => {
@@ -406,9 +405,9 @@ document.addEventListener("DOMContentLoaded", () => {
       }
       currentAbortController = new AbortController(); // 新しいコントローラーを作成
 
-      // クリックされたボタンからサブモードを取得 (再調査のauto/manual判定用)
+      // クリックされたボタンからサブモードを取得 (再調査判定用)
       const btn = e.currentTarget;
-      const subMode = btn.dataset.mode; // reresearch_auto or reresearch_manual
+      const subMode = btn.dataset.mode;
 
       // 市況分析・総合分析・再調査以外は銘柄選択が必須
       if (selectedMode !== "market" && selectedMode !== "total" && selectedMode !== "reresearch" && !currentChartData.ticker) {
@@ -446,7 +445,7 @@ document.addEventListener("DOMContentLoaded", () => {
               msg = "複数のレポートを統合して総合分析中...";
               title = "## 総合分析レポート\n\n";
           } else {
-              // 再調査モード (reresearch)
+              // 再調査モード(ユーザ質問とAI調査)
               endpoint = "/re_research";
               
               if (subMode === "reresearch_manual") {
@@ -467,7 +466,6 @@ document.addEventListener("DOMContentLoaded", () => {
                   msg = "あなたの質問について調査中...";
                   title = "## 再調査レポート (Q&A)\n\n";
               } else {
-                  // reresearch_auto
                   bodyData = { 
                       selected_results: selectedResults,
                       mode: "auto",
@@ -589,13 +587,13 @@ document.addEventListener("DOMContentLoaded", () => {
               const modeName = title.replace(/## |💎 |🌍 |📊 |📈 |🔍 |レポート|結果/g, "").trim();
               const dateStr = new Date().toISOString().split('T')[0].replace(/-/g, "");
               
-              // 銘柄コード + 銘柄名 + 分析種別 + 日付
+              // 「銘柄名 + 分析種別 + 日付」で命名
               exportPdfBtn.dataset.title = `${stockName}${modeName}${dateStr}`;
 
-              // --- 🌟 追加：履歴への追加処理 ---
+              // --- 履歴への追加処理 ---
               addHistoryItem(selectedMode, bodyData, data.date_range, htmlResult, data.analysis || "");
 
-              // --- 🌟 追加：結果表示エリアへスクロール ---
+              // --- 結果表示エリアへスクロール ---
               document.getElementById('analysis-container').scrollIntoView({ behavior: 'smooth', block: 'start' });
           }
           
@@ -729,7 +727,7 @@ document.addEventListener("DOMContentLoaded", () => {
       historyList.insertBefore(item, historyList.firstChild);
   }
 
-  // --- 10. PDFエクスポート実行 (Server-Side) ---
+  // --- 10. PDFエクスポート実行 (サーバ側) ---
   exportPdfBtn.addEventListener("click", async () => {
       const content = exportPdfBtn.dataset.rawContent;
       const title = exportPdfBtn.dataset.title;
@@ -801,8 +799,7 @@ document.addEventListener("DOMContentLoaded", () => {
   if (resetChartBtn) {
     resetChartBtn.addEventListener("click", () => {
       chart.timeScale().fitContent();
-      // 乖離率チャートも同期させるため、少し遅らせて同期処理を走らせるか、
-      // 単純に両方をfitContentする
+      // 乖離率チャートも同期
       kairiChart.timeScale().fitContent();
     });
   }

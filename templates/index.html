@@ -24,7 +24,7 @@
 
 <body class="bg-light">
 
-  <!-- 🏆 ヘッダー -->
+  <!-- ヘッダー -->
   <header class="mb-4" style="background: linear-gradient(135deg, #1a237e 0%, #283593 100%); color: white; padding: 20px 20px; text-align: center; border-bottom: 4px solid #ffd700; box-shadow: 0 4px 10px rgba(0,0,0,0.2);">
       <h1 style="margin: 0; font-size: 24px; letter-spacing: 2px; font-weight: 700; text-shadow: 1px 1px 3px rgba(0,0,0,0.3);">
         <i class="bi bi-graph-up-arrow" style="margin-right: 10px; color: #ffd700;"></i>日経225スマートAI分析
@@ -35,7 +35,7 @@
   <div class="container-fluid px-2" style="max-width: 98%;">
     <div class="row g-4">
       
-      <!-- 🛠️ 左カラム：コントロール & チャート -->
+      <!-- 左カラム：コントロール & チャート -->
       <div class="col-lg-12">
         <div class="row g-4">
           <!-- コントロールパネル -->
@@ -52,7 +52,7 @@
                       <input type="text" id="stockSearch" class="form-control" placeholder="銘柄名・コードを入力..." autocomplete="off">
                   </div>
                   <div id="searchResults" class="list-group position-absolute w-100 shadow-lg" style="z-index: 1000; max-height: 300px; overflow-y: auto; display: none; top: 100%;">
-                      <!-- 検索候補がここに表示されます -->
+                      <!-- 検索候補がここに表示 -->
                   </div>
                 </div>
 
@@ -126,7 +126,7 @@
         </div>
       </div>
 
-      <!-- 📈 下段：基本統計情報 -->
+      <!-- 基本統計情報 -->
       <div class="col-12">
         <div id="stockStats" class="card shadow-sm" style="display:none !important;"> <!-- JSでdisplay:flexになるのを防ぐためclass制御したいがJS依存なのでstyleは残す -->
           <div class="card-body">
@@ -163,7 +163,7 @@
         </div>
       </div>
 
-      <!-- 🤖 AI分析セクション -->
+      <!-- AI分析セクション -->
       <div class="col-12 analysis-section">
         <div class="card shadow-sm">
           <div class="card-header bg-white p-0 border-bottom-0">
@@ -179,7 +179,7 @@
           </div>
 
           <div class="card-body bg-light">
-            <!-- 🌀 ローディング -->
+            <!-- ローディングアニメ -->
             <div id="loading-container">
               <div class="loading-content">
                 <div class="spinner-border text-primary" role="status" id="loading-spinner"></div>
@@ -208,7 +208,7 @@
               </div>
             </div>
 
-            <!-- 🕵️ 再調査フォーム -->
+            <!-- 再調査フォーム -->
             <div id="reresearch-form-area" class="bg-white p-4 rounded border mb-4 shadow-sm" style="display: none;">
                 <div class="row g-4">
                     <!-- ❶ AI深掘り調査 -->
@@ -274,7 +274,7 @@
                 </div>
             </div>
 
-            <!-- 🌍 市況分析フォーム -->
+            <!-- 市況分析フォーム -->
             <div id="market-form-area" class="bg-white p-4 rounded border mb-4 shadow-sm" style="display: none;">
               <div class="row g-4">
                 <div class="col-md-6 col-lg-3">
@@ -402,6 +402,7 @@
                                 <label class="form-check-label"><input type="checkbox" class="form-check-input" name="market_topic" value="中国関連"> 中国関連</label>
                                 <label class="form-check-label"><input type="checkbox" class="form-check-input" name="market_topic" value="ハイテク関連"> ハイテク関連</label>
                                 <label class="form-check-label"><input type="checkbox" class="form-check-input" name="market_topic" value="情報通信"> 情報通信</label>
+                                <label class="form-check-label"><input type="checkbox" class="form-check-input" name="market_topic" value="ソフトウェア"> ソフトウェア</label>
                                 <label class="form-check-label"><input type="checkbox" class="form-check-input" name="market_topic" value="小売"> 小売</label>
                                 <label class="form-check-label"><input type="checkbox" class="form-check-input" name="market_topic" value="商社"> 商社</label>
                                 <label class="form-check-label"><input type="checkbox" class="form-check-input" name="market_topic" value="ゲーム"> ゲーム</label>
@@ -537,11 +538,11 @@
         </div>
       </div>
 
-      <!-- 📜 分析履歴セクション -->
+      <!-- 分析履歴セクション -->
       <div class="col-12 mt-5">
         <h4 class="border-bottom pb-2 mb-3 text-secondary"><i class="bi bi-clock-history"></i> 分析履歴</h4>
         <div id="history-list" class="list-group list-group-flush">
-          <!-- JSで履歴アイテムが追加される -->
+          <!-- JSで分析履歴が追加されていく -->
           <p class="text-muted fst-italic p-3">まだ履歴はありません。</p>
         </div>
       </div>
@@ -549,12 +550,12 @@
     </div>
   </div>
 
-  <!-- Footer -->
+  <!-- フッター -->
   <footer class="text-center text-muted py-4 mt-5 border-top small">
     &copy; 2026 Nikkei 225 Smart AI Analysis. Powered by Gemini & Flask.
   </footer>
 
-  <!-- 📦 Python(Flask)から全銘柄データをJavaScriptへ受け渡し -->
+  <!-- Python(Flask)から全銘柄データをJavaScriptへ受け渡し -->
   <script>
     const allStocks = JSON.parse('{{ stocks | tojson | safe }}');
   </script>
