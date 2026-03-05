@@ -30,7 +30,7 @@ except Exception as e:
     client = None
 
 # 使用するGeminiモデルの設定
-MODEL_NAME = "gemini-3-flash-preview"
+MODEL_NAME = "gemini-3.1-flash-lite-preview"
 MODEL_LITE = "gemini-2.5-flash-lite" # 会社説明用
 
 # --- パス設定 ---
@@ -62,7 +62,7 @@ def load_stock_data():
     return industries, stocks
 
 # --- Google News RSS 取得関数 ---
-def fetch_rss_news(topics, limit=200):
+def fetch_rss_news(topics, limit=130):
     if not topics:
         return None, "トピックが選択されていません。", None
 
@@ -145,9 +145,9 @@ def get_data():
         max_date = df['High'].idxmax().strftime("%Y-%m-%d")
         min_price = float(df['Low'].min())
         min_date = df['Low'].idxmin().strftime("%Y-%m-%d")
-        # 出来高TOP10の抽出
-        top10_vol = df.sort_values(by='Volume', ascending=False).head(10)
-        volume_ranking = [{"date": idx.strftime("%Y-%m-%d"), "volume": int(row["Volume"])} for idx, row in top10_vol.iterrows()]
+        # 出来高TOP20の抽出
+        top20_vol = df.sort_values(by='Volume', ascending=False).head(20)
+        volume_ranking = [{"date": idx.strftime("%Y-%m-%d"), "volume": int(row["Volume"])} for idx, row in top20_vol.iterrows()]
 
         # --- 🏦 ファンダメンタルズ情報の取得 ---
         market_cap_str, div_yield_str, payout_ratio_str, ex_div_date_str, roe_str, roa_str, per_str, pbr_str = "N/A", "N/A", "N/A", "N/A", "N/A", "N/A", "N/A", "N/A"
@@ -264,6 +264,7 @@ def analyze():
     deep_analysis = req.get("deep_analysis", False)
     
     recent_candles = [{"t": c["time"], "c": c["close"]} for c in req.get("candles", [])] 
+    recent_volume = [{"t": c["time"], "v": c["volume"]} for c in req.get("candles", [])]
     recent_kairi = [{"t": k["time"], "v": round(k["value"], 2)} for k in req.get("kairi25", [])]
 
     if not client: return jsonify({"error": "AI Client not initialized"}), 500
@@ -280,20 +281,28 @@ def analyze():
     あなたは金融市場を分析するプロの投資アナリストです。
     
     # 目的
-    投資判断のために、以下の図データ、出力ルール、指示内容に従って
+    投資判断のために、以下のデータ、出力ルール、指示内容に従って
     銘柄「{ticker}」のテクニカル指標に基づく分析をする。
 
-    # 図データ
+    # データ
     直近1年間の終値推移: {recent_candles}
+    直近1年間の出来高推移: {recent_volume}
     直近1年間の25日移動平均線乖離率: {recent_kairi}
     
-    # 出力ルール
+    # 出力ルール(全体)
     - 分析結果はMarkdown形式で出力すること。
     - 分析結果が不明瞭な箇所は、不明瞭な箇所を記述した上で、「判断材料不足」としてもよい。
     
+    ## 出力ルール(個別)
+    - 25・75日移動平均線がクロスした時をゴールデンクロスまたはデッドクロスと考えて分析すること。
+    - 5・25・75日移動平均線3本が収束した状況をオーバーシュートと考えて分析すること。
+    - 上昇トレンドの裏付けとして、出来高を確認して分析すること。株価上昇と出来高上昇が伴っていれば、上昇トレンドを示唆すること。
+    - 下落トレンドの裏付けとして、出来高を確認して分析すること。株価下落時に出来高が急増していれば、パニック売りを示唆すること。
+    - トレンド転換点と思われる場合は、出来高が急増しているか確認すること。天井圏では出来高急増を買いのピークとし、底値圏では出来高急増を売りのピークとすること。
+    
     # 指示内容
     1. トレンド分析：5日(短期), 25日(中期), 75日(長期)の各移動平均線の向きから現在のトレンドを分析。
-    2. 移動平均線分析：25日と75日のクロス状況(ゴールデンクロスまたはデッドクロス)と、移動平均線3本が収束することによるオーバーシュートの予兆を考察。
+    2. 移動平均線分析：25・75日移動平均線のクロス状況と、移動平均線のオーバーシュートの予兆を考察。
     3. ライン分析：明確な支持線・抵抗線が見える日付範囲と価格帯を分析。
     4. 乖離率考察：現在の25日乖離率と、過去の乖離率の推移を比較することで、売られすぎ・買われすぎの目安となる値を極値を基に考察。異常値と思われる値は異常値である旨を記載すること。
     5. 結論：1～4の内容を基に、今後の展望と、戦略アドバイスを出力。
@@ -308,7 +317,7 @@ def analyze():
         gen_config_params = {}
         if not use_lite:
             # Liteモデル以外(High Thinking)の場合のみThinking設定を入れる
-            gen_config_params["thinking_config"] = types.ThinkingConfig(include_thoughts=True, thinking_level="low")
+            gen_config_params["thinking_config"] = types.ThinkingConfig(include_thoughts=True, thinking_level="high")
 
         response = client.models.generate_content(
             model=target_model,
@@ -372,7 +381,7 @@ def analyze_full():
             "tools": [types.Tool(google_search=types.GoogleSearch())]
         }
         if not use_lite:
-            gen_config_params["thinking_config"] = types.ThinkingConfig(include_thoughts=True, thinking_level="low")
+            gen_config_params["thinking_config"] = types.ThinkingConfig(include_thoughts=True, thinking_level="high")
 
         # Google検索(Grounding)機能を有効化して回答を生成
         response = client.models.generate_content(
@@ -424,7 +433,7 @@ def analyze_volume():
     
     # 目的
     投資判断のために、以下の出来高データ、出力ルール、指示内容に従って
-    銘柄「{ticker}」の出来高数1位～10位の日に市場で何が起きたのかを、
+    銘柄「{ticker}」の出来高数1位～20位の日に市場で何が起きたのかを、
     Google Searchを用いて調査する。
 
     # 出来高データ
@@ -649,9 +658,12 @@ def get_company_info():
     
     # 目的
     簡潔な企業情報を知るために、
-    以下の出力ルールと指示内容に従って
+    以下のデータと出力ルールと指示内容に従って
     日本株銘柄「{name} ({ticker})」について、
     Google Searchを用いて最新情報を調査する。
+    
+    # データ
+    現在の日時:{datetime.now().strftime('%Y年%m月%d日')}
     
     # 出力ルール
     - 回答はMarkdown形式で出力すること。
@@ -659,6 +671,7 @@ def get_company_info():
     - 各項目1〜4行程度で簡潔にまとめること。
     - 出力結果の最後の部分に、「会社URL:」として、会社の公式サイトURLを必ず記載すること。
     - 分析結果が不明瞭な箇所は、不明瞭な箇所を記述した上で、「判断材料不足」としてもよい。
+    - 調査の際は現在の日時を参照した上で調査すること。
     
     # 指示内容
     1. 事業内容と優位性: 主要な事業を記述し、その後に直近1年の中で力を入れている事業を記述。その後に、競合他社に対する優位性を記述。
@@ -792,7 +805,7 @@ def re_research():
                     "tools": [types.Tool(google_search=types.GoogleSearch())]
                 }
                 if not use_lite:
-                    gen_config_params["thinking_config"] = types.ThinkingConfig(include_thoughts=True, thinking_level="low")
+                    gen_config_params["thinking_config"] = types.ThinkingConfig(include_thoughts=True, thinking_level="high")
 
                 response = client.models.generate_content(
                     model=target_model,

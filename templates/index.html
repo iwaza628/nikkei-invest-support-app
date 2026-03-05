@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>日経225スマートAI分析</title>
+  <title>日本株JPX400+αスマートAI分析</title>
 
   <!-- Bootstrap 5 CSS -->
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
@@ -27,7 +27,7 @@
   <!-- ヘッダー -->
   <header class="mb-4" style="background: linear-gradient(135deg, #1a237e 0%, #283593 100%); color: white; padding: 20px 20px; text-align: center; border-bottom: 4px solid #ffd700; box-shadow: 0 4px 10px rgba(0,0,0,0.2);">
       <h1 style="margin: 0; font-size: 24px; letter-spacing: 2px; font-weight: 700; text-shadow: 1px 1px 3px rgba(0,0,0,0.3);">
-        <i class="bi bi-graph-up-arrow" style="margin-right: 10px; color: #ffd700;"></i>日経225スマートAI分析
+        <i class="bi bi-graph-up-arrow" style="margin-right: 10px; color: #ffd700;"></i>日本株JPX400+αスマートAI分析
       </h1>
       <p style="margin: 5px 0 0; font-size: 13px; opacity: 0.9; font-weight: 300; letter-spacing: 1px;">Advanced AI All-round Analysis</p>
   </header>
@@ -540,7 +540,12 @@
 
       <!-- 分析履歴セクション -->
       <div class="col-12 mt-5">
-        <h4 class="border-bottom pb-2 mb-3 text-secondary"><i class="bi bi-clock-history"></i> 分析履歴</h4>
+        <div class="d-flex justify-content-between align-items-center border-bottom pb-2 mb-3">
+          <h4 class="text-secondary m-0"><i class="bi bi-clock-history"></i> 分析履歴</h4>
+          <button id="resetCheckboxesBtn" class="btn btn-outline-secondary btn-sm rounded-pill px-3">
+            <i class="bi bi-arrow-counterclockwise"></i> 選択を解除
+          </button>
+        </div>
         <div id="history-list" class="list-group list-group-flush">
           <!-- JSで分析履歴が追加されていく -->
           <p class="text-muted fst-italic p-3">まだ履歴はありません。</p>

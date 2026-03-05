@@ -289,6 +289,13 @@ document.addEventListener("DOMContentLoaded", () => {
   // --- 6. サーバーからデータ取得とチャートへの反映 ---
   stockSelect.addEventListener("change", async function() {
     if (!this.value) return;
+
+    // 銘柄が切り替わった際、以前の分析結果表示をクリアして非表示にする
+    if (analysisResult) analysisResult.innerHTML = "";
+    const analysisContainer = document.getElementById("analysis-container");
+    if (analysisContainer) analysisContainer.style.display = "none";
+    if (exportPdfBtn) exportPdfBtn.style.display = "none";
+
     const stockInfo = allStocks.find(s => s.ticker === this.value);
     if (stockInfo) {
         saveToHistory(stockInfo.ticker, stockInfo.name);
@@ -523,14 +530,14 @@ document.addEventListener("DOMContentLoaded", () => {
           } else if (selectedMode === "tech") {
               endpoint = "/analyze";
               isFastMode = document.getElementById("tech_fast").checked;
-              // テクニカル分析には全データを送信（バックエンドで1年分として処理）
+              // テクニカル分析には全データを送信（バックエンドで1年分として処理。出来高データも含まれる）
               bodyData = {
                   ...currentChartData,
                   beginner_mode: document.getElementById("tech_beginner").checked,
                   deep_analysis: document.getElementById("tech_deep").checked,
                   use_lite_model: isFastMode
               };
-              msg = "チャート形状を分析中...";
+              msg = "チャート形状と出来高を分析中...";
               title = "## テクニカル分析レポート\n\n";
           } else {
               endpoint = "/analyze_full";
@@ -801,6 +808,17 @@ document.addEventListener("DOMContentLoaded", () => {
       chart.timeScale().fitContent();
       // 乖離率チャートも同期
       kairiChart.timeScale().fitContent();
+    });
+  }
+
+  // --- 14. 分析履歴のチェックボックスリセットボタン ---
+  const resetCheckboxesBtn = document.getElementById("resetCheckboxesBtn");
+  if (resetCheckboxesBtn) {
+    resetCheckboxesBtn.addEventListener("click", () => {
+      const checkboxes = document.querySelectorAll('.history-select');
+      checkboxes.forEach(cb => {
+        cb.checked = false;
+      });
     });
   }
 });
