@@ -4,6 +4,7 @@ import sqlite3
 import pandas as pd
 import yfinance as yf
 import requests
+from yahooquery import Ticker as YQTicker
 import feedparser
 import urllib.parse
 import time
@@ -180,85 +181,65 @@ def get_data():
         except Exception as e:
             print(f"Industry fetch error: {e}")
 
-        # ---  ファンダメンタルズ情報の取得 ---
+        # --- ファンダメンタルズ情報の取得 (yahooqueryを使用) ---
         market_cap_str, div_yield_str, payout_ratio_str, ex_div_date_str, roe_str, roa_str, per_str, pbr_str = "N/A", "N/A", "N/A", "N/A", "N/A", "N/A", "N/A", "N/A"
         
         try:
-            stock_obj = yf.Ticker(ticker)
+            yq_ticker = YQTicker(ticker)
+            # クラウド環境でのブロック対策としてyahooqueryを利用する
+            summary = yq_ticker.summary_detail
+            stats = yq_ticker.key_stats
+            fin = yq_ticker.financial_data
             
-            # info (重いAPI) からデータを取得する（リトライとセッションキャッシュクリアのロジック追加）
-            info = {}
-            for attempt in range(2):
-                try:
-                    info = stock_obj.info
-                    # infoが空の辞書でないか、少なくとも時価総額等の主要データがあれば成功とみなす
-                    if info and ('marketCap' in info or 'dividendYield' in info or 'trailingPE' in info):
-                        break
-                except Exception as e:
-                    print(f"yfinance info attempt {attempt + 1} error: {e}")
-                    time.sleep(1) # 短い待機
-                
-            # fast_info (軽量API) はオブジェクト属性としてアクセスを試みる
-            fast_info = getattr(stock_obj, 'fast_info', None)
-            
-            # 時価総額
-            mcap = None
-            if fast_info is not None:
-                mcap = getattr(fast_info, 'market_cap', None)
-            if not mcap and info:
-                mcap = info.get("marketCap")
+            # yahooqueryは結果を {ticker: {data}} または文字列（エラー時）で返す
+            s_data = summary.get(ticker, {}) if isinstance(summary, dict) else {}
+            st_data = stats.get(ticker, {}) if isinstance(stats, dict) else {}
+            f_data = fin.get(ticker, {}) if isinstance(fin, dict) else {}
 
+            # 時価総額
+            mcap = s_data.get('marketCap')
             if mcap:
                 market_cap_str = f"{mcap / 1e12:.2f} 兆円" if mcap >= 1e12 else f"{mcap / 1e8:.0f} 億円"
 
             # PER/PBR
-            if info:
-                per = info.get("forwardPE") or info.get("trailingPE")
-                if per: per_str = f"{per:.2f}"
-                
-                pbr = info.get("priceToBook")
-                if pbr: pbr_str = f"{pbr:.2f}"
+            per = s_data.get('trailingPE') or s_data.get('forwardPE')
+            if per: per_str = f"{per:.2f}"
+            
+            pbr = st_data.get('priceToBook')
+            if pbr: pbr_str = f"{pbr:.2f}"
 
             # 配当利回り
-            if info:
-                current_price = None
-                if fast_info is not None:
-                    current_price = getattr(fast_info, 'last_price', None)
-                
-                if not current_price and not df.empty:
-                    current_price = df['Close'].iloc[-1]
+            dy = s_data.get('dividendYield') or s_data.get('trailingAnnualDividendYield')
+            if dy is not None:
+                display_dy = dy * 100 if dy < 0.5 else dy 
+                div_yield_str = f"{display_dy:.2f} %"
 
-                d_rate = info.get("dividendRate") 
-                
-                if d_rate and current_price:
-                    calculated_yield = (d_rate / current_price) * 100
-                    div_yield_str = f"{calculated_yield:.2f} %"
+            # その他の指標
+            payout = s_data.get('payoutRatio')
+            if payout is not None: payout_ratio_str = f"{payout * 100:.2f} %"
+            
+            ex_div = s_data.get('exDividendDate')
+            if ex_div:
+                # 文字列（例: '2026-03-30 09:00:00'）またはタイムスタンプの可能性がある
+                if isinstance(ex_div, str):
+                    try:
+                        ex_div_date_str = ex_div.split(" ")[0][5:] # '03-30' を抽出
+                    except:
+                        ex_div_date_str = ex_div
                 else:
-                    dy = info.get("dividendYield") or info.get("trailingAnnualDividendYield")
-                    if dy:
-                        # dyが10%以上（0.1ではない）で返ってくる場合と、0.0xで返ってくる場合を考慮
-                        display_dy = dy * 100 if dy < 0.5 else dy 
-                        div_yield_str = f"{display_dy:.2f} %"
-                
-                # その他の指標
-                payout = info.get("payoutRatio")
-                if payout is not None: payout_ratio_str = f"{payout * 100:.2f} %"
-                
-                ex_div = info.get("exDividendDate")
-                if ex_div: 
                     try:
                         ex_div_date_str = datetime.fromtimestamp(ex_div).strftime('%m-%d')
                     except:
                         pass
-                
-                roe = info.get("returnOnEquity")
-                if roe: roe_str = f"{roe * 100:.2f} %"
-                
-                roa = info.get("returnOnAssets")
-                if roa: roa_str = f"{roa * 100:.2f} %"
+
+            roe = f_data.get('returnOnEquity')
+            if roe is not None: roe_str = f"{roe * 100:.2f} %"
+            
+            roa = f_data.get('returnOnAssets')
+            if roa is not None: roa_str = f"{roa * 100:.2f} %"
 
         except Exception as e:
-            print(f"Fundamentals fetch error: {e}")
+            print(f"Fundamentals fetch error (yahooquery): {e}")
             # エラーが出ても株価データがあれば続行
         
         # テクニカル指標（5, 25, 75日移動平均、25日乖離率）の計算
