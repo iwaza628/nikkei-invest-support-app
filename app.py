@@ -3,6 +3,7 @@ import os
 import sqlite3
 import pandas as pd
 import yfinance as yf
+import requests
 import feedparser
 import urllib.parse
 import time
@@ -36,6 +37,18 @@ MODEL_LITE = "gemini-2.5-flash-lite" # 会社説明用
 
 # --- パス設定 ---
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# --- yfinance用 セッション設定（Render等クラウド環境からのアクセス制限回避） ---
+try:
+    session = requests.Session()
+    session.headers.update({
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+        'Accept-Language': 'ja,en-US;q=0.9,en;q=0.8'
+    })
+    yf.set_session(session)
+except Exception as e:
+    print(f"yfinance session setup error: {e}")
 CSV_PATH = os.path.join(BASE_DIR, 'stocks.csv')  # 銘柄リストCSV
 DB_PATH = os.path.join(BASE_DIR, 'stocks.db')    # 株価保存用DB
 
