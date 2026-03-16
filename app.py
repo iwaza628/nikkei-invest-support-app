@@ -7,6 +7,7 @@ import feedparser
 import urllib.parse
 import time
 import markdown
+import random
 from flask import Flask, render_template, request, jsonify, send_file
 from io import BytesIO
 import pdfkit
@@ -149,74 +150,90 @@ def get_data():
         top20_vol = df.sort_values(by='Volume', ascending=False).head(20)
         volume_ranking = [{"date": idx.strftime("%Y-%m-%d"), "volume": int(row["Volume"])} for idx, row in top20_vol.iterrows()]
 
-        # --- 🏦 ファンダメンタルズ情報の取得 ---
+        # --- 🏢 業種の取得 ---
+        industry_str = "N/A"
+        try:
+            if os.path.exists(CSV_PATH):
+                stocks_df = pd.read_csv(CSV_PATH, encoding='utf-8-sig')
+                # tickerが一致する行を探す
+                target_row = stocks_df[stocks_df['ticker'] == ticker]
+                
+                if not target_row.empty:
+                    industry_str = target_row.iloc[0]['industry']
+        except Exception as e:
+            print(f"Industry fetch error: {e}")
+
+        # ---  ファンダメンタルズ情報の取得 ---
         market_cap_str, div_yield_str, payout_ratio_str, ex_div_date_str, roe_str, roa_str, per_str, pbr_str = "N/A", "N/A", "N/A", "N/A", "N/A", "N/A", "N/A", "N/A"
         
         try:
             stock_obj = yf.Ticker(ticker)
             
-            # fast_info (軽量API) を優先して利用
+            # info (重いAPI) からデータを取得する
+            info = {}
+            try:
+                info = stock_obj.info
+            except Exception as e:
+                print(f"yfinance info error: {e}")
+                
+            # fast_info (軽量API) はオブジェクト属性としてアクセスを試みる
+            fast_info = getattr(stock_obj, 'fast_info', None)
+            
             # 時価総額
             mcap = None
-            if hasattr(stock_obj, 'fast_info') and 'market_cap' in stock_obj.fast_info:
-                mcap = stock_obj.fast_info['market_cap']
-            
-            # fast_infoで取れない場合はinfo (重いAPI) を試す
-            info = {}
-            if not mcap:
-                try:
-                    info = stock_obj.info
-                    mcap = info.get("marketCap")
-                except Exception:
-                    pass
+            if fast_info is not None:
+                mcap = getattr(fast_info, 'market_cap', None)
+            if not mcap and info:
+                mcap = info.get("marketCap")
 
             if mcap:
                 market_cap_str = f"{mcap / 1e12:.2f} 兆円" if mcap >= 1e12 else f"{mcap / 1e8:.0f} 億円"
 
-            # PER/PBR (infoから取得が必要)
-            if not info:
-                try:
-                    info = stock_obj.info
-                except Exception:
-                    info = {}
-            
-            per = info.get("forwardPE") or info.get("trailingPE")
-            if per: per_str = f"{per:.2f}"
-            
-            pbr = info.get("priceToBook")
-            if pbr: pbr_str = f"{pbr:.2f}"
+            # PER/PBR
+            if info:
+                per = info.get("forwardPE") or info.get("trailingPE")
+                if per: per_str = f"{per:.2f}"
+                
+                pbr = info.get("priceToBook")
+                if pbr: pbr_str = f"{pbr:.2f}"
 
             # 配当利回り
-            current_price = None
-            if hasattr(stock_obj, 'fast_info') and 'last_price' in stock_obj.fast_info:
-                current_price = stock_obj.fast_info['last_price']
-            
-            if not current_price and not df.empty:
-                current_price = df['Close'].iloc[-1]
+            if info:
+                current_price = None
+                if fast_info is not None:
+                    current_price = getattr(fast_info, 'last_price', None)
+                
+                if not current_price and not df.empty:
+                    current_price = df['Close'].iloc[-1]
 
-            d_rate = info.get("dividendRate") 
-            
-            if d_rate and current_price:
-                calculated_yield = (d_rate / current_price) * 100
-                div_yield_str = f"{calculated_yield:.2f} %"
-            else:
-                dy = info.get("dividendYield") or info.get("trailingAnnualDividendYield")
-                if dy:
-                    display_dy = dy * 100 if dy < 0.5 else dy 
-                    div_yield_str = f"{display_dy:.2f} %"
-            
-            # その他の指標
-            payout = info.get("payoutRatio")
-            if payout is not None: payout_ratio_str = f"{payout * 100:.2f} %"
-            
-            ex_div = info.get("exDividendDate")
-            if ex_div: ex_div_date_str = datetime.fromtimestamp(ex_div).strftime('%m-%d')
-            
-            roe = info.get("returnOnEquity")
-            if roe: roe_str = f"{roe * 100:.2f} %"
-            
-            roa = info.get("returnOnAssets")
-            if roa: roa_str = f"{roa * 100:.2f} %"
+                d_rate = info.get("dividendRate") 
+                
+                if d_rate and current_price:
+                    calculated_yield = (d_rate / current_price) * 100
+                    div_yield_str = f"{calculated_yield:.2f} %"
+                else:
+                    dy = info.get("dividendYield") or info.get("trailingAnnualDividendYield")
+                    if dy:
+                        # dyが10%以上（0.1ではない）で返ってくる場合と、0.0xで返ってくる場合を考慮
+                        display_dy = dy * 100 if dy < 0.5 else dy 
+                        div_yield_str = f"{display_dy:.2f} %"
+                
+                # その他の指標
+                payout = info.get("payoutRatio")
+                if payout is not None: payout_ratio_str = f"{payout * 100:.2f} %"
+                
+                ex_div = info.get("exDividendDate")
+                if ex_div: 
+                    try:
+                        ex_div_date_str = datetime.fromtimestamp(ex_div).strftime('%m-%d')
+                    except:
+                        pass
+                
+                roe = info.get("returnOnEquity")
+                if roe: roe_str = f"{roe * 100:.2f} %"
+                
+                roa = info.get("returnOnAssets")
+                if roa: roa_str = f"{roa * 100:.2f} %"
 
         except Exception as e:
             print(f"Fundamentals fetch error: {e}")
@@ -245,7 +262,8 @@ def get_data():
                 "max_price": max_price, "max_date": max_date, "min_price": min_price, "min_date": min_date,
                 "volume_ranking": volume_ranking, "market_cap": market_cap_str,
                 "dividend_yield": div_yield_str, "payout_ratio": payout_ratio_str, "ex_div_date": ex_div_date_str, 
-                "roe": roe_str, "roa": roa_str, "per": per_str, "pbr": pbr_str
+                "roe": roe_str, "roa": roa_str, "per": per_str, "pbr": pbr_str,
+                "industry": industry_str
             }
         })
     except Exception as e:

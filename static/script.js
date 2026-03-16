@@ -364,6 +364,10 @@ document.addEventListener("DOMContentLoaded", () => {
       document.getElementById("statROA").textContent = data.stats.roa;
       document.getElementById("statMax").textContent = `${fmtPrice(data.stats.max_price)} (${data.stats.max_date})`;
       document.getElementById("statMin").textContent = `${fmtPrice(data.stats.min_price)} (${data.stats.min_date})`;
+      
+      // 業種の表示
+      document.getElementById("statIndustry").textContent = data.stats.industry || "N/A";
+
       // 出来高データは隠しリストに保持（分析機能用）
       document.getElementById("statVolRanking").innerHTML = data.stats.volume_ranking.map((v, i) => `<li>${i+1}. ${v.date}: <b>${v.volume.toLocaleString()}</b></li>`).join("");
       document.getElementById("statDiv").textContent = data.stats.dividend_yield;
