@@ -358,10 +358,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
       document.getElementById("stockStats").style.display = "flex";
       document.getElementById("statCap").textContent = data.stats.market_cap;
-      document.getElementById("statPER").textContent = data.stats.per;
-      document.getElementById("statPBR").textContent = data.stats.pbr;
-      document.getElementById("statROE").textContent = data.stats.roe;
-      document.getElementById("statROA").textContent = data.stats.roa;
       document.getElementById("statMax").textContent = `${fmtPrice(data.stats.max_price)} (${data.stats.max_date})`;
       document.getElementById("statMin").textContent = `${fmtPrice(data.stats.min_price)} (${data.stats.min_date})`;
       
@@ -371,7 +367,6 @@ document.addEventListener("DOMContentLoaded", () => {
       // 出来高データは隠しリストに保持（分析機能用）
       document.getElementById("statVolRanking").innerHTML = data.stats.volume_ranking.map((v, i) => `<li>${i+1}. ${v.date}: <b>${v.volume.toLocaleString()}</b></li>`).join("");
       document.getElementById("statDiv").textContent = data.stats.dividend_yield;
-      document.getElementById("statPayout").textContent = data.stats.payout_ratio;
       document.getElementById("statExDiv").textContent = data.stats.ex_div_date;
 
     } catch (e) { console.error(e); isSyncing = false; }
