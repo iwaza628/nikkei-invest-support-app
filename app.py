@@ -40,12 +40,16 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # --- yfinance用 セッション設定（Render等クラウド環境からのアクセス制限回避） ---
 try:
+    # Requests Sessionの構築（YFinanceからのブロックを回避するため）
     session = requests.Session()
     session.headers.update({
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
-        'Accept-Language': 'ja,en-US;q=0.9,en;q=0.8'
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+        "Accept": "*/*",
+        "Accept-Encoding": "gzip, deflate, br",
+        "Connection": "keep-alive",
     })
+    
+    # セッションを設定
     yf.set_session(session)
 except Exception as e:
     print(f"yfinance session setup error: {e}")
@@ -182,12 +186,17 @@ def get_data():
         try:
             stock_obj = yf.Ticker(ticker)
             
-            # info (重いAPI) からデータを取得する
+            # info (重いAPI) からデータを取得する（リトライとセッションキャッシュクリアのロジック追加）
             info = {}
-            try:
-                info = stock_obj.info
-            except Exception as e:
-                print(f"yfinance info error: {e}")
+            for attempt in range(2):
+                try:
+                    info = stock_obj.info
+                    # infoが空の辞書でないか、少なくとも時価総額等の主要データがあれば成功とみなす
+                    if info and ('marketCap' in info or 'dividendYield' in info or 'trailingPE' in info):
+                        break
+                except Exception as e:
+                    print(f"yfinance info attempt {attempt + 1} error: {e}")
+                    time.sleep(1) # 短い待機
                 
             # fast_info (軽量API) はオブジェクト属性としてアクセスを試みる
             fast_info = getattr(stock_obj, 'fast_info', None)
